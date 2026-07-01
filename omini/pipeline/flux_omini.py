@@ -16,8 +16,6 @@ from transformers import pipeline
 from peft.tuners.tuners_utils import BaseTunerLayer
 from accelerate.utils import is_torch_version
 
-from contextlib import contextmanager
-
 import cv2
 
 from PIL import Image, ImageFilter
@@ -142,32 +140,71 @@ class Condition(object):
         return tokens, ids
 
 
-@contextmanager
-def specify_lora(lora_modules: List[BaseTunerLayer], specified_lora):
-    # Filter valid lora modules
-    valid_lora_modules = [m for m in lora_modules if isinstance(m, BaseTunerLayer)]
-    # Save original scales
-    original_scales = [
-        {
-            adapter: module.scaling[adapter]
-            for adapter in module.active_adapters
-            if adapter in module.scaling
-        }
-        for module in valid_lora_modules
-    ]
-    # Enter context: adjust scaling
-    for module in valid_lora_modules:
-        for adapter in module.active_adapters:
-            if adapter in module.scaling:
-                module.scaling[adapter] = 1 if adapter == specified_lora else 0
-    try:
-        yield
-    finally:
-        # Exit context: restore original scales
-        for module, scales in zip(valid_lora_modules, original_scales):
-            for adapter in module.active_adapters:
-                if adapter in module.scaling:
-                    module.scaling[adapter] = scales[adapter]
+def lora_forward(module, x: torch.Tensor, adapter) -> torch.Tensor:
+    """
+    Apply a single, explicitly-selected LoRA adapter to ``module`` at scale 1.0.
+
+    This is a fast, allocation-free replacement for the previous
+    ``specify_lora`` context manager, which mutated ``module.scaling`` on every
+    call. Semantics are preserved exactly:
+
+    * If ``module`` is not a PEFT ``BaseTunerLayer`` it is called directly.
+    * The base (non-LoRA) projection is always applied.
+    * When ``adapter`` is not None and is an *active* adapter with weights on
+      this module, its LoRA delta is added with scale hardcoded to ``1.0``
+      (matching ``specify_lora`` setting ``scaling[adapter] = 1``). All other
+      adapters contribute nothing (matching ``scaling[other] = 0``).
+
+    At inference LoRA dropout is the identity, so it is skipped.
+    """
+    if not isinstance(module, BaseTunerLayer):
+        return module(x)
+
+    result = module.base_layer(x)
+
+    # No adapter requested, adapters disabled, or weights already merged into
+    # the base layer -> nothing more to add (mirrors PEFT's forward).
+    if adapter is None or module.disable_adapters or module.merged:
+        return result
+
+    # Only an *active* adapter with LoRA weights on this module contributes,
+    # exactly as in the original specify_lora + PEFT forward path.
+    if adapter not in module.active_adapters or adapter not in module.lora_A:
+        return result
+
+    torch_result_dtype = result.dtype
+    lora_A = module.lora_A[adapter]
+    lora_B = module.lora_B[adapter]
+    x = x.to(lora_A.weight.dtype)
+    result = result + lora_B(lora_A(x))  # scale hardcoded to 1.0
+    return result.to(torch_result_dtype)
+
+
+def _adanorm_zero_forward(norm, x, emb, adapter):
+    """AdaLayerNormZero.forward with LoRA applied to the inner ``linear``."""
+    emb = lora_forward(norm.linear, norm.silu(emb), adapter)
+    shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = emb.chunk(6, dim=1)
+    x = norm.norm(x) * (1 + scale_msa[:, None]) + shift_msa[:, None]
+    return x, gate_msa, shift_mlp, scale_mlp, gate_mlp
+
+
+def _adanorm_zero_single_forward(norm, x, emb, adapter):
+    """AdaLayerNormZeroSingle.forward with LoRA applied to the inner ``linear``."""
+    emb = lora_forward(norm.linear, norm.silu(emb), adapter)
+    shift_msa, scale_msa, gate_msa = emb.chunk(3, dim=1)
+    x = norm.norm(x) * (1 + scale_msa[:, None]) + shift_msa[:, None]
+    return x, gate_msa
+
+
+def _feedforward_forward(ff, x, adapter):
+    """FeedForward.forward routing each sub-module through ``lora_forward``.
+
+    Only the output projection (``ff.net[2]``) is LoRA-wrapped in practice;
+    ``lora_forward`` transparently falls back to a plain call for the others.
+    """
+    for module in ff.net:
+        x = lora_forward(module, x, adapter)
+    return x
 
 
 def attn_forward(
@@ -206,10 +243,10 @@ def attn_forward(
 
     # Prepare query, key, value for each hidden state (image branch)
     for i, hidden_state in enumerate(hidden_states):
-        with specify_lora((attn.to_q, attn.to_k, attn.to_v), adapters[i + h2_n]):
-            query = attn.to_q(hidden_state)
-            key = attn.to_k(hidden_state)
-            value = attn.to_v(hidden_state)
+        adapter = adapters[i + h2_n]
+        query = lora_forward(attn.to_q, hidden_state, adapter)
+        key = lora_forward(attn.to_k, hidden_state, adapter)
+        value = lora_forward(attn.to_v, hidden_state, adapter)
 
         head_dim = key.shape[-1] // attn.heads
         reshape_fn = lambda x: x.view(bs, -1, attn.heads, head_dim).transpose(1, 2)
@@ -261,8 +298,7 @@ def attn_forward(
     for i, hidden_state in enumerate(hidden_states):
         h = attn_outputs[i + h2_n]
         if getattr(attn, "to_out", None) is not None:
-            with specify_lora((attn.to_out[0],), adapters[i + h2_n]):
-                h = attn.to_out[0](h)
+            h = lora_forward(attn.to_out[0], h, adapters[i + h2_n])
         h_out.append(h)
 
     return (h_out, h2_out) if h2_n else h_out
@@ -286,8 +322,11 @@ def block_forward(
         txt_variables.append(self.norm1_context(text_h, emb=tembs[i]))
 
     for i, image_h in enumerate(image_hidden_states):
-        with specify_lora((self.norm1.linear,), adapters[i + txt_n]):
-            img_variables.append(self.norm1(image_h, emb=tembs[i + txt_n]))
+        img_variables.append(
+            _adanorm_zero_forward(
+                self.norm1, image_h, tembs[i + txt_n], adapters[i + txt_n]
+            )
+        )
 
     # Attention.
     img_attn_output, txt_attn_output = attn_forward(
@@ -316,8 +355,8 @@ def block_forward(
             image_hidden_states[i] + img_attn_output[i] * gate_msa.unsqueeze(1)
         ).to(image_hidden_states[i].dtype)
         norm_h = self.norm2(image_h) * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
-        with specify_lora((self.ff.net[2],), adapters[i + txt_n]):
-            image_h = image_h + self.ff(norm_h) * gate_mlp.unsqueeze(1)
+        ff_out = _feedforward_forward(self.ff, norm_h, adapters[i + txt_n])
+        image_h = image_h + ff_out * gate_mlp.unsqueeze(1)
         image_out.append(clip_hidden_states(image_h))
     return image_out, text_out
 
@@ -339,9 +378,12 @@ def single_block_forward(
         # FLUX version. In the original implementation, the gates were computed using
         # the combined hidden states from both the image and text branches. Here, each
         # branch computes its gate using only its own hidden state.
-        with specify_lora((self.norm.linear, self.proj_mlp), adapters[i]):
-            h_norm, gates[i] = self.norm(hidden_state, emb=tembs[i])
-            mlp_hidden_states[i] = self.act_mlp(self.proj_mlp(h_norm))
+        h_norm, gates[i] = _adanorm_zero_single_forward(
+            self.norm, hidden_state, tembs[i], adapters[i]
+        )
+        mlp_hidden_states[i] = self.act_mlp(
+            lora_forward(self.proj_mlp, h_norm, adapters[i])
+        )
         hidden_state_norm.append(h_norm)
 
     attn_outputs = attn_forward(
@@ -350,10 +392,9 @@ def single_block_forward(
 
     h_out = []
     for i in range(len(hidden_states)):
-        with specify_lora((self.proj_out,), adapters[i]):
-            h = torch.cat([attn_outputs[i], mlp_hidden_states[i]], dim=2)
-            h = gates[i].unsqueeze(1) * self.proj_out(h) + hidden_states[i]
-            h_out.append(clip_hidden_states(h))
+        h = torch.cat([attn_outputs[i], mlp_hidden_states[i]], dim=2)
+        h = gates[i].unsqueeze(1) * lora_forward(self.proj_out, h, adapters[i]) + hidden_states[i]
+        h_out.append(clip_hidden_states(h))
 
     return h_out
 
@@ -383,8 +424,9 @@ def transformer_forward(
     # Preprocess the image_features
     image_hidden_states = []
     for i, image_feature in enumerate(image_features):
-        with specify_lora((self.x_embedder,), adapters[i + txt_n]):
-            image_hidden_states.append(self.x_embedder(image_feature))
+        image_hidden_states.append(
+            lora_forward(self.x_embedder, image_feature, adapters[i + txt_n])
+        )
 
     # Preprocess the text_features
     text_hidden_states = []
