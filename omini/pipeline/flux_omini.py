@@ -1,3 +1,4 @@
+import math
 import torch
 from typing import List, Union, Optional, Dict, Any, Callable, Type, Tuple
 
@@ -177,6 +178,10 @@ def attn_forward(
     hidden_states2: Optional[List[torch.FloatTensor]] = [],
     position_embs: Optional[List[torch.Tensor]] = None,
     group_mask: Optional[torch.Tensor] = None,
+    condition_scale: float = 1.0,
+    # Per-branch bool flags (same ordering as `queries`/`group_mask`):
+    # index 0 = text, index 1 = main image, index >= 2 = condition branches.
+    condition_flags: Optional[List[bool]] = None,
     cache_mode: Optional[str] = None,
     # to determine whether to cache the keys and values for this branch
     to_cache: Optional[List[torch.Tensor]] = None,
@@ -232,22 +237,63 @@ def attn_forward(
                 cache_storage[attn.cache_idx][0].append(k)
                 cache_storage[attn.cache_idx][1].append(v)
 
+    # `condition_scale` is a soft strength knob: an ADDITIVE bias of
+    # log(condition_scale) is applied to the attention logits BETWEEN condition
+    # tokens and non-condition (text + main image) tokens, in both directions.
+    # log(scale) > 0 strengthens the condition's influence, < 0 weakens it.
+    # When condition_scale == 1.0 the bias is 0 and we pass attn_mask=None so
+    # behavior/perf is byte-identical to the base code.
+    use_cond_bias = condition_scale != 1.0
+    cond_bias = math.log(condition_scale) if use_cond_bias else 0.0
+
+    def _is_cond(idx: int) -> bool:
+        return bool(condition_flags[idx]) if condition_flags is not None else False
+
     attn_outputs = []
     for i, query in enumerate(queries):
         keys_, values_ = [], []
+        # (segment_length, bias_value) per appended key segment, in order
+        bias_segments = []
+        q_is_cond = _is_cond(i)
         # Add keys and values from other branches
         for j, (k, v) in enumerate(zip(keys, values)):
             if (group_mask is not None) and not (group_mask[i][j].item()):
                 continue
             keys_.append(k)
             values_.append(v)
+            if use_cond_bias:
+                # Bias applies only when exactly one of {query, key} is a
+                # condition branch and the other is a non-condition branch.
+                seg_bias = cond_bias if (q_is_cond != _is_cond(j)) else 0.0
+                bias_segments.append((k.shape[2], seg_bias))
         if cache_mode == "read":
-            keys_.extend(cache_storage[attn.cache_idx][0])
-            values_.extend(cache_storage[attn.cache_idx][1])
-        # Add keys and values from cache TODO
+            cached_keys = cache_storage[attn.cache_idx][0]
+            cached_values = cache_storage[attn.cache_idx][1]
+            keys_.extend(cached_keys)
+            values_.extend(cached_values)
+            if use_cond_bias:
+                # All cached keys/values belong to condition branches. In read
+                # mode the only queries are non-condition (text + main image),
+                # so every cached segment gets the bias unless the query itself
+                # is a condition branch.
+                seg_bias = cond_bias if not q_is_cond else 0.0
+                for ck in cached_keys:
+                    bias_segments.append((ck.shape[2], seg_bias))
+        keys_cat = torch.cat(keys_, dim=2)
+        values_cat = torch.cat(values_, dim=2)
+        # Build the additive attention bias (broadcast over batch, heads and
+        # query positions). Only constructed when condition_scale != 1.0.
+        attn_mask = None
+        if use_cond_bias:
+            attn_mask = query.new_zeros(1, 1, 1, keys_cat.shape[2])
+            offset = 0
+            for seg_len, seg_bias in bias_segments:
+                if seg_bias != 0.0:
+                    attn_mask[..., offset : offset + seg_len] = seg_bias
+                offset += seg_len
         # Attention computation
         attn_output = F.scaled_dot_product_attention(
-            query, torch.cat(keys_, dim=2), torch.cat(values_, dim=2)
+            query, keys_cat, values_cat, attn_mask=attn_mask
         ).to(query.dtype)
         attn_output = attn_output.transpose(1, 2).reshape(bs, -1, attn.heads * head_dim)
         attn_outputs.append(attn_output)
@@ -480,6 +526,7 @@ def generate(
     # Condition Parameters (Optional)
     main_adapter: Optional[List[str]] = None,
     conditions: List[Condition] = [],
+    condition_scale: float = 1.0,
     image_guidance_scale: float = 1.0,
     transformer_kwargs: Optional[Dict[str, Any]] = {},
     kv_cache=False,
@@ -652,6 +699,9 @@ def generate(
                 cache_storage=kv_cond if kv_cache else None,
                 to_cache=[False, False, *[True] * len(c_latents)],
                 group_mask=group_mask,
+                condition_scale=condition_scale,
+                condition_flags=[False, False]
+                + ([True] * len(c_latents) if use_cond else []),
                 **transformer_kwargs,
             )[0]
 
@@ -671,6 +721,9 @@ def generate(
                     cache_mode=mode if kv_cache else None,
                     cache_storage=kv_uncond if kv_cache else None,
                     to_cache=[False, False, *[True] * len(c_latents)],
+                    condition_scale=condition_scale,
+                    condition_flags=[False, False]
+                    + ([True] * len(c_latents) if use_cond else []),
                     **transformer_kwargs,
                 )[0]
 
