@@ -281,7 +281,12 @@ def attn_forward(
     # When condition_scale == 1.0 the bias is 0 and we pass attn_mask=None so
     # behavior/perf is byte-identical to the base code.
     use_cond_bias = condition_scale != 1.0
-    cond_bias = math.log(condition_scale) if use_cond_bias else 0.0
+    # Guard the math.log domain: condition_scale <= 0 means "fully suppress the
+    # condition" (bias -> -inf) instead of crashing on math.log(0)/negatives.
+    if use_cond_bias:
+        cond_bias = math.log(condition_scale) if condition_scale > 0 else float("-inf")
+    else:
+        cond_bias = 0.0
 
     def _is_cond(idx: int) -> bool:
         return bool(condition_flags[idx]) if condition_flags is not None else False
@@ -763,6 +768,7 @@ def generate(
                     cache_mode=mode if kv_cache else None,
                     cache_storage=kv_uncond if kv_cache else None,
                     to_cache=[False, False, *[True] * len(c_latents)],
+                    group_mask=group_mask,
                     condition_scale=condition_scale,
                     condition_flags=[False, False]
                     + ([True] * len(c_latents) if use_cond else []),
