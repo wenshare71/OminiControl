@@ -588,11 +588,18 @@ def generate(
     self._num_timesteps = len(timesteps)
 
     if kv_cache:
-        attn_counter = 0
-        for module in self.transformer.modules():
-            if isinstance(module, Attention):
-                setattr(module, "cache_idx", attn_counter)
-                attn_counter += 1
+        # Enumerate the attention modules in forward order (dual-stream blocks
+        # first, then single-stream blocks). We index the block attentions
+        # directly instead of relying on isinstance(module, Attention): in
+        # newer diffusers the FLUX blocks use a model-specific attention class
+        # (e.g. FluxAttention) that is not a subclass of the generic Attention,
+        # which would otherwise leave cache_idx unset.
+        attn_modules = [block.attn for block in self.transformer.transformer_blocks] + [
+            block.attn for block in self.transformer.single_transformer_blocks
+        ]
+        attn_counter = len(attn_modules)
+        for cache_idx, module in enumerate(attn_modules):
+            setattr(module, "cache_idx", cache_idx)
         kv_cond = [[[], []] for _ in range(attn_counter)]
         kv_uncond = [[[], []] for _ in range(attn_counter)]
 

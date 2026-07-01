@@ -1,5 +1,12 @@
-transformers
-diffusers
+# Validated stack (July 2026): diffusers 0.38.0, python 3.12, torch 2.8 (cu12x).
+# Install torch separately for your CUDA, e.g.:
+#   pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+#
+# huggingface_hub MUST stay <1.0: transformers (<=4.57) pins it, and a hub >=1.0
+# in the environment breaks `import transformers`. diffusers 0.38 works with 0.36.x.
+transformers>=4.55,<5
+diffusers==0.38.0
+huggingface_hub<1.0
 peft
 opencv-python
 protobuf
