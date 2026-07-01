@@ -65,7 +65,7 @@ conda activate omini
 pip install -r requirements.txt
 ```
 ### Usage example
-1. Subject-driven generation: `examples/subject.ipynb`
+1. Subject-driven generation: `examples/subject.ipynb` (on `FLUX.1-dev`: `examples/subject_dev.ipynb`)
 2. In-painting: `examples/inpainting.ipynb`
 3. Canny edge to image, depth to image, colorization, deblurring: `examples/spatial.ipynb`
 
@@ -166,7 +166,7 @@ pip install -r requirements.txt
 
 ## Limitations
 1. The model's subject-driven generation primarily works with objects rather than human subjects due to the absence of human data in training.
-2. The subject-driven generation model may not work well with `FLUX.1-dev`.
+2. The subject-driven LoRAs were trained on `FLUX.1-schnell`, but they also work on `FLUX.1-dev` when using real image guidance: call `generate(...)` with `image_guidance_scale > 1.0` (e.g. `1.5`) and more steps (~20–28). `image_guidance_scale` is the tunable CFG knob; the distilled `guidance_scale` must be kept at `3.5` (the value used in training, for train/inference consistency — it is not a free hyperparameter). See `examples/subject_dev.ipynb`. Without image guidance, `FLUX.1-dev` tends to ignore the condition.
 3. The released model only supports the resolution of 512x512.
 
 ## Training
