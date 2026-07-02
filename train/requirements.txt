@@ -1,5 +1,11 @@
-diffusers==0.31.0
-transformers
+# Training stack — keep in sync with ../requirements.txt (diffusers 0.38.0).
+# Install torch separately for your CUDA, e.g.:
+#   pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+# huggingface_hub MUST stay <1.0 (transformers pins it; a hub >=1.0 breaks
+# `import transformers`).
+transformers>=4.55,<5
+diffusers==0.38.0
+huggingface_hub<1.0
 peft
 opencv-python
 protobuf

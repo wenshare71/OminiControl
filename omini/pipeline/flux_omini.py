@@ -156,7 +156,9 @@ def lora_forward(module, x: torch.Tensor, adapter) -> torch.Tensor:
       (matching ``specify_lora`` setting ``scaling[adapter] = 1``). All other
       adapters contribute nothing (matching ``scaling[other] = 0``).
 
-    At inference LoRA dropout is the identity, so it is skipped.
+    LoRA dropout is applied via the adapter's own dropout module, which is an
+    Identity (or ``p == 0``) at inference/eval, so inference stays bit-identical
+    while training matches PEFT's semantics.
     """
     if not isinstance(module, BaseTunerLayer):
         return module(x)
@@ -176,8 +178,9 @@ def lora_forward(module, x: torch.Tensor, adapter) -> torch.Tensor:
     torch_result_dtype = result.dtype
     lora_A = module.lora_A[adapter]
     lora_B = module.lora_B[adapter]
+    dropout = module.lora_dropout[adapter]  # Identity at eval / when p == 0
     x = x.to(lora_A.weight.dtype)
-    result = result + lora_B(lora_A(x))  # scale hardcoded to 1.0
+    result = result + lora_B(lora_A(dropout(x)))  # scale hardcoded to 1.0
     return result.to(torch_result_dtype)
 
 

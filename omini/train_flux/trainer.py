@@ -273,23 +273,31 @@ class TrainingCallback(L.Callback):
         self.test_function = test_function
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        self.total_steps += 1
+
+        # The gradient-norm summary is only consumed by wandb (every step) or
+        # the periodic console print, so only pay for the full-parameter sweep
+        # when it will actually be used.
+        need_grad_stats = self.use_wandb or (
+            self.total_steps % self.print_every_n_steps == 0
+        )
         gradient_size = 0
         max_gradient_size = 0
-        count = 0
-        for _, param in pl_module.named_parameters():
-            if param.grad is not None:
-                gradient_size += param.grad.norm(2).item()
-                max_gradient_size = max(max_gradient_size, param.grad.norm(2).item())
-                count += 1
-        if count > 0:
-            gradient_size /= count
-
-        self.total_steps += 1
+        if need_grad_stats:
+            count = 0
+            for _, param in pl_module.named_parameters():
+                if param.grad is not None:
+                    grad_norm = param.grad.norm(2).item()
+                    gradient_size += grad_norm
+                    max_gradient_size = max(max_gradient_size, grad_norm)
+                    count += 1
+            if count > 0:
+                gradient_size /= count
 
         # Print training progress every n steps
         if self.use_wandb:
             report_dict = {
-                "steps": batch_idx,
+                "batch": batch_idx,
                 "steps": self.total_steps,
                 "epoch": trainer.current_epoch,
                 "gradient_size": gradient_size,
@@ -359,6 +367,12 @@ def train(dataset, trainable_model, config, test_function):
         callbacks = [TrainingCallback(run_name, training_config, test_function)]
 
     # Initialize trainer
+    # Multi-GPU note: the LoRA adapter is only applied on the condition branch,
+    # so the last single block's query/MLP LoRA params never receive gradients
+    # (that block's condition output is discarded). DDP's default
+    # find_unused_parameters=False errors out on them, so enable the detection
+    # when running distributed.
+    is_distributed = int(os.environ.get("WORLD_SIZE", 1)) > 1
     trainer = L.Trainer(
         accumulate_grad_batches=training_config["accumulate_grad_batches"],
         callbacks=callbacks if is_main_process else [],
@@ -368,6 +382,7 @@ def train(dataset, trainable_model, config, test_function):
         max_steps=training_config.get("max_steps", -1),
         max_epochs=training_config.get("max_epochs", -1),
         gradient_clip_val=training_config.get("gradient_clip_val", 0.5),
+        strategy="ddp_find_unused_parameters_true" if is_distributed else "auto",
     )
 
     setattr(trainer, "training_config", training_config)
