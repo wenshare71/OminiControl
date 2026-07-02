@@ -10,8 +10,8 @@
 <a href="https://github.com/Yuanshi9815/Subjects200K"><img src="https://img.shields.io/badge/GitHub-Dataset-blue.svg?logo=github&" alt="GitHub"></a>
 <a href="https://huggingface.co/datasets/Yuanshi/Subjects200K"><img src="https://img.shields.io/badge/🤗_HuggingFace-Dataset-ffbd45.svg" alt="HuggingFace"></a>
 <br>
-<a href="https://arxiv.org/abs/2411.15098"><img src="https://img.shields.io/badge/ariXv-OminiControl-A42C25.svg" alt="arXiv"></a>
-<a href="https://arxiv.org/abs/2503.08280"><img src="https://img.shields.io/badge/ariXv-OminiControl2-A42C25.svg" alt="arXiv"></a>
+<a href="https://arxiv.org/abs/2411.15098"><img src="https://img.shields.io/badge/arXiv-OminiControl-A42C25.svg" alt="arXiv"></a>
+<a href="https://arxiv.org/abs/2503.08280"><img src="https://img.shields.io/badge/arXiv-OminiControl2-A42C25.svg" alt="arXiv"></a>
 
 > **OminiControl: Minimal and Universal Control for Diffusion Transformer**
 > <br>
@@ -48,10 +48,11 @@ OminiControl is a minimal yet powerful universal control framework for Diffusion
 * **Minimal Design 🚀**: Injects control signals while preserving original model structure. Only introduces 0.1% additional parameters to the base model.
 
 ## News
+- **2026-07-02**: Codebase updated for `diffusers` 0.38. `generate()` gains a `condition_scale` argument to adjust condition strength, subject-driven generation now works on `FLUX.1-dev` (see [example](./examples/subject_dev.ipynb)), and OminiControl2's KV-cache fast inference (`kv_cache=True`) is now documented (see [Usage example](#usage-example)).
 - **2025-05-12**: ⭐️ The code of [OminiControl2](https://arxiv.org/abs/2503.08280) is released. It introduces a new efficient conditioning method for diffusion transformers. (Check out the training code [here](./train)).
 - **2025-05-12**: Support custom style LoRA. (Check out the [example](./examples/combine_with_style_lora.ipynb)).
-- **2025-04-09**: ⭐️ [OminiControl Art](https://huggingface.co/spaces/Yuanshi/OminiControl_Art) is released. It can stylize any image with a artistic style. (Check out the [demo](https://huggingface.co/spaces/Yuanshi/OminiControl_Art) and [inference examples](./examples/ominicontrol_art.ipynb)).
-- **2024-12-26**: Training code are released. Now you can create your own OminiControl model by customizing any control tasks (3D, multi-view, pose-guided, try-on, etc.) with the FLUX model. Check the [training folder](./train) for more details.
+- **2025-04-09**: ⭐️ [OminiControl Art](https://huggingface.co/spaces/Yuanshi/OminiControl_Art) is released. It can stylize any image with an artistic style. (Check out the [demo](https://huggingface.co/spaces/Yuanshi/OminiControl_Art) and [inference examples](./examples/ominicontrol_art.ipynb)).
+- **2024-12-26**: Training code is released. Now you can create your own OminiControl model by customizing any control tasks (3D, multi-view, pose-guided, try-on, etc.) with the FLUX model. Check the [training folder](./train) for more details.
 
 ## Quick Start
 ### Setup (Optional)
@@ -60,18 +61,35 @@ OminiControl is a minimal yet powerful universal control framework for Diffusion
 conda create -n omini python=3.12
 conda activate omini
 ```
-2. **Requirements installation**
+2. **Torch installation** (pick the index URL matching your CUDA version)
+```bash
+pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+```
+3. **Requirements installation**
 ```bash
 pip install -r requirements.txt
 ```
 ### Usage example
 1. Subject-driven generation: `examples/subject.ipynb` (on `FLUX.1-dev`: `examples/subject_dev.ipynb`)
-2. In-painting: `examples/inpainting.ipynb`
-3. Canny edge to image, depth to image, colorization, deblurring: `examples/spatial.ipynb`
+2. Subject-driven generation at 1024x1024: `examples/subject_1024.ipynb` (best quality with the 1024-trained model)
+3. In-painting: `examples/inpainting.ipynb`
+4. Canny edge to image, depth to image, colorization, deblurring: `examples/spatial.ipynb`
+5. Combining with a custom style LoRA: `examples/combine_with_style_lora.ipynb`
+6. Image stylization (OminiControl Art): `examples/ominicontrol_art.ipynb`
 
+> **Note (multiple LoRAs):** if you load more than one adapter via repeated `pipe.load_lora_weights(..., adapter_name=...)` calls, activate them explicitly with `pipe.set_adapters(["adapter_a", "adapter_b"])` — otherwise only the last-loaded adapter stays active and the others are silently ignored. See `examples/spatial.ipynb` for the pattern.
+
+#### Adjusting condition strength
+`generate()` accepts a `condition_scale` argument (default `1.0`, which reproduces the original behavior exactly). Values `> 1` strengthen the condition image's influence, values `< 1` weaken it, and `0` suppresses it entirely.
+```python
+result = generate(pipe, prompt=prompt, conditions=[condition], condition_scale=1.3)
+```
+
+#### Faster generation with KV-cache (OminiControl2)
+Pass `kv_cache=True` to `generate()` to compute the condition branch's keys/values once and reuse them across all remaining steps (~1.5x end-to-end speedup at 8 steps). This requires a LoRA trained with `independent_condition: true` — see [Efficient Generation (OminiControl2)](./train/README.md#efficient-generation-ominicontrol2).
 
 ### Guidelines for subject-driven generation
-1. Input images are automatically center-cropped and resized to 512x512 resolution.
+1. Center-crop and resize your input image to the model's native resolution (512x512 for `subject`/`subject_512`, 1024x1024 for `subject_1024_beta`) before passing it in — the pipeline does not do this automatically. See the example notebooks for the preprocessing code.
 2. When writing prompts, refer to the subject using phrases like `this item`, `the object`, or `it`. e.g.
    1. *A close up view of this item. It is placed on a wooden table.*
    2. *A young lady is wearing this shirt.*
@@ -96,7 +114,7 @@ pip install -r requirements.txt
 - Prompt1: *A close up view of this item. It is placed on a wooden table. The background is a dark room, the TV is on, and the screen is showing a cooking show. With text on the screen that reads 'Omini Control!.'*
 - Prompt2: *A film style shot. On the moon, this item drives across the moon surface. A flag on it reads 'Omini'. The background is that Earth looms large in the foreground.*
 - Prompt3: *In a Bauhaus style room, this item is placed on a shiny glass table, with a vase of flowers next to it. In the afternoon sun, the shadows of the blinds are cast on the wall.*
-- Prompt4: *"On the beach, a lady sits under a beach umbrella with 'Omini' written on it. She's wearing this shirt and has a big smile on her face, with her surfboard hehind her. The sun is setting in the background. The sky is a beautiful shade of orange and purple."*
+- Prompt4: *On the beach, a lady sits under a beach umbrella with 'Omini' written on it. She's wearing this shirt and has a big smile on her face, with her surfboard hehind her. The sun is setting in the background. The sky is a beautiful shade of orange and purple.*
 </details>
 <details>
 <summary>More results</summary>
@@ -148,17 +166,21 @@ pip install -r requirements.txt
 ## Models
 
 **Subject-driven control:**
-| Model                                                                                            | Base model     | Description                                                                                                                                                 | Resolution   |
-| ------------------------------------------------------------------------------------------------ | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| [`experimental`](https://huggingface.co/Yuanshi/OminiControl/tree/main/experimental) / `subject` | FLUX.1-schnell | The model used in the paper.                                                                                                                                | (512, 512)   |
-| [`omini`](https://huggingface.co/Yuanshi/OminiControl/tree/main/omini) / `subject_512`           | FLUX.1-schnell | The model has been fine-tuned on a larger dataset.                                                                                                          | (512, 512)   |
-| [`omini`](https://huggingface.co/Yuanshi/OminiControl/tree/main/omini) / `subject_1024`          | FLUX.1-schnell | The model has been fine-tuned on a larger dataset and accommodates higher resolution.                                                                       | (1024, 1024) |
-| [`oye-cartoon`](https://huggingface.co/saquiboye/oye-cartoon)                                    | FLUX.1-dev     | The model has been fine-tuned on [oye-cartoon](https://huggingface.co/datasets/saquiboye/oye-cartoon) dataset by [@saquib764](https://github.com/Saquib764) | (512, 512)   |
+| Model                                                                                            | Description                                                                                                                                                                | Resolution   |
+| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| [`experimental`](https://huggingface.co/Yuanshi/OminiControl/tree/main/experimental) / `subject` | The model used in the paper.                                                                                                                                               | (512, 512)   |
+| [`omini`](https://huggingface.co/Yuanshi/OminiControl/tree/main/omini) / `subject_512`           | The model has been fine-tuned on a larger dataset.                                                                                                                         | (512, 512)   |
+| [`omini`](https://huggingface.co/Yuanshi/OminiControl/tree/main/omini) / `subject_1024_beta`     | The model has been fine-tuned on a larger dataset and trained at 1024x1024.                                                                                                | (1024, 1024) |
+| [`oye-cartoon`](https://huggingface.co/saquiboye/oye-cartoon)                                    | Fine-tuned on the [oye-cartoon](https://huggingface.co/datasets/saquiboye/oye-cartoon) dataset by [@saquib764](https://github.com/Saquib764) (for `FLUX.1-dev`)            | (512, 512)   |
 
-**Spatial aligned control:**
-| Model                                                                                                     | Base model | Description                                                                | Resolution   |
-| --------------------------------------------------------------------------------------------------------- | ---------- | -------------------------------------------------------------------------- | ------------ |
-| [`experimental`](https://huggingface.co/Yuanshi/OminiControl/tree/main/experimental) / `<task_name>`      | FLUX.1     | Canny edge to image, depth to image, colorization, deblurring, in-painting | (512, 512)   |=
+> The subject LoRAs were trained on `FLUX.1-dev`. When running them on `FLUX.1-dev`, enable real image guidance (`image_guidance_scale > 1.0`, keep `guidance_scale=3.5`) — see `examples/subject_dev.ipynb`. They also run on `FLUX.1-schnell` (as in the example notebooks), where no image guidance is needed.
+>
+> `subject_1024_beta` was trained at 1024x1024 and gives its best results at that resolution. The weight currently lives in a non-main revision of the HF repo — pass `revision=` when loading it (see `examples/subject_1024.ipynb`).
+
+**Spatially aligned control:**
+| Model                                                                                                     | Description                                                                | Resolution   |
+| --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------ |
+| [`experimental`](https://huggingface.co/Yuanshi/OminiControl/tree/main/experimental) / `<task_name>`      | Canny edge to image (`canny`), depth to image (`depth`), colorization (`coloring`), deblurring (`deblurring`), in-painting (`fill`). Works on both `FLUX.1-dev` and `FLUX.1-schnell`. | (512, 512)   |
 
 ## Community Extensions
 - [ComfyUI-Diffusers-OminiControl](https://github.com/Macoron/ComfyUI-Diffusers-OminiControl) - ComfyUI integration by [@Macoron](https://github.com/Macoron)
@@ -166,8 +188,8 @@ pip install -r requirements.txt
 
 ## Limitations
 1. The model's subject-driven generation primarily works with objects rather than human subjects due to the absence of human data in training.
-2. The subject-driven LoRAs were trained on `FLUX.1-schnell`, but they also work on `FLUX.1-dev` when using real image guidance: call `generate(...)` with `image_guidance_scale > 1.0` (e.g. `1.5`) and more steps (~20–28). `image_guidance_scale` is the tunable CFG knob; the distilled `guidance_scale` must be kept at `3.5` (the value used in training, for train/inference consistency — it is not a free hyperparameter). See `examples/subject_dev.ipynb`. Without image guidance, `FLUX.1-dev` tends to ignore the condition.
-3. The released model only supports the resolution of 512x512.
+2. The subject-driven LoRAs were trained on `FLUX.1-dev`. When running them on `FLUX.1-dev`, you must use real image guidance: call `generate(...)` with `image_guidance_scale > 1.0` (e.g. `1.5`) and more steps (~20–28) — without it, `FLUX.1-dev` tends to ignore the condition. `image_guidance_scale` is the tunable CFG knob; the distilled `guidance_scale` must be kept at `3.5` (the value used in training, for train/inference consistency — it is not a free hyperparameter). See `examples/subject_dev.ipynb`. On `FLUX.1-schnell` (as in the example notebooks), no image guidance is needed.
+3. The `subject`/`subject_512` and spatial LoRAs were trained at 512x512 and work best at that resolution; `subject_1024_beta` was trained at 1024x1024 and gives its best results there (see `examples/subject_1024.ipynb`). Non-square resolutions (e.g. 512x768) also work.
 
 ## Training
 Training instructions can be found in this [folder](./train).
@@ -182,17 +204,18 @@ We would like to acknowledge that the computational work involved in this resear
 
 ## Citation
 ```
-@article{tan2025ominicontrol,
+@inproceedings{tan2025ominicontrol,
   title={OminiControl: Minimal and Universal Control for Diffusion Transformer},
   author={Tan, Zhenxiong and Liu, Songhua and Yang, Xingyi and Xue, Qiaochu and Wang, Xinchao},
   booktitle={Proceedings of the IEEE/CVF International Conference on Computer Vision},
   year={2025}
 }
 
-@article{tan2025ominicontrol2,
-  title={OminiControl2: Efficient Conditioning for Diffusion Transformers},
+@inproceedings{tan2026ominicontrol2,
+  title={Ominicontrol2: Efficient conditioning for diffusion transformers},
   author={Tan, Zhenxiong and Xue, Qiaochu and Yang, Xingyi and Liu, Songhua and Wang, Xinchao},
-  journal={arXiv preprint arXiv:2503.08280},
-  year={2025}
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages={4256--4265},
+  year={2026}
 }
 ```

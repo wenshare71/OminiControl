@@ -26,13 +26,14 @@
 
 1. Create and activate a new conda environment:
    ```bash
-   conda create -n omini python=3.10
+   conda create -n omini python=3.12
    conda activate omini
    ```
 
 2. Install required packages:
    ```bash
-   pip install -r requirements.txt
+   pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128  # pick your CUDA
+   pip install -r train/requirements.txt
    ```
 
 ## Dataset Preparation
@@ -80,13 +81,13 @@ Use these scripts to start training immediately:
 
 6. **Token integration** (OminiControl2):
    ```bash
-   bash train/script/train_token_intergration.sh
+   bash train/script/train_token_integration.sh
    ```
 
 ## Basic Training
 
 ### Tasks from OminiControl
-<a href="https://arxiv.org/abs/2411.15098"><img src="https://img.shields.io/badge/ariXv-2411.15098-A42C25.svg" alt="arXiv"></a>
+<a href="https://arxiv.org/abs/2411.15098"><img src="https://img.shields.io/badge/arXiv-2411.15098-A42C25.svg" alt="arXiv"></a>
 
 1. Subject-driven generation:
    ```bash
@@ -107,12 +108,13 @@ Use these scripts to start training immediately:
    * Depth map to image (`depth`)
    * Image to depth map (`depth_pred`)
    * Image inpainting (`fill`)
-   * Super resolution (`sr`)
    
    🌟 Change the `condition_type` parameter in the config file to switch between tasks.
    </details>
 
-**Note**: Check the **script files** (`train/script/`) and **config files** (`train/configs/`) for WanDB and GPU settings.
+**Note**: Check the **script files** (`train/script/`) for GPU settings (`CUDA_VISIBLE_DEVICES`) and the **config files** (`train/config/`) for WandB settings.
+
+**Multi-GPU**: Set `CUDA_VISIBLE_DEVICES` in the script — `accelerate launch` uses all visible GPUs, and the trainer configures DDP automatically (including `find_unused_parameters`).
 
 ### Creating Your Own Task
 
@@ -134,6 +136,8 @@ You can create a custom task by building a new dataset and modifying the test co
    > Each unit equals one patch (16 pixels). For a 512px-wide condition image (32 patches), `position_delta = (0, -32)` moves it fully to the left.
    > 
    > This controls whether conditions and generated images share space or appear side-by-side.
+   > 
+   > The sign only sets the direction of the offset — `(0, -a)` and `(0, a)` both separate the images. The released `subject_512` model uses `(0, 32)` while `subject_1024_beta` uses `(0, -32)`; see [issue #89](https://github.com/Yuanshi9815/OminiControl/issues/89).
 
 2. **Modify the test code:**
    Define `test_function()` in `train_custom.py`. Refer to the function in `train_subject.py` for examples. Make sure to keep the `position_delta` parameter consistent with your dataset.
@@ -148,17 +152,19 @@ The default optimizer is `Prodigy`. To use `AdamW` instead, modify the config fi
 ```yaml
 optimizer:
   type: AdamW
-  lr: 1e-4
-  weight_decay: 0.001
+  params:
+    lr: 1e-4
+    weight_decay: 0.001
 ```
 
 #### LoRA Configuration
-Default LoRA rank is 4. Increase it for complex tasks (keep `r` and `lora_alpha` parameters the same):
+The default LoRA rank is 4 for the spatial and OminiControl2 tasks, and 16 for the subject task (see `train/config/*.yaml`). Increase it for complex tasks (keep `r` and `lora_alpha` parameters the same):
 ```yaml
 lora_config:
   r: 128
   lora_alpha: 128
 ```
+`lora_config` also accepts `lora_dropout`, which is applied during training.
 
 #### Trainable Modules
 The `target_modules` parameter uses regex patterns to specify which modules to train. See [PEFT Documentation](https://huggingface.co/docs/peft/package_reference/lora) for details.
@@ -182,7 +188,7 @@ bash train/script/train_multi_condition.sh
 ```
 
 ### Efficient Generation (OminiControl2)
-<a href="https://arxiv.org/abs/2503.08280"><img src="https://img.shields.io/badge/ariXv-2503.08280-A42C25.svg" alt="arXiv"></a>
+<a href="https://arxiv.org/abs/2503.08280"><img src="https://img.shields.io/badge/arXiv-2503.08280-A42C25.svg" alt="arXiv"></a>
 
 [OminiControl2](https://arxiv.org/abs/2503.08280) introduces techniques to improve generation efficiency:
 
@@ -229,7 +235,7 @@ Further reduce tokens by merging condition and generation tokens into a unified 
 
 *Example:*
 ```bash
-bash train/script/train_token_intergration.sh
+bash train/script/train_token_integration.sh
 ```
 
 ## Citation
@@ -237,17 +243,18 @@ bash train/script/train_token_intergration.sh
 If you find this code useful, please cite our papers:
 
 ```
-@article{tan2024ominicontrol,
+@inproceedings{tan2025ominicontrol,
   title={OminiControl: Minimal and Universal Control for Diffusion Transformer},
   author={Tan, Zhenxiong and Liu, Songhua and Yang, Xingyi and Xue, Qiaochu and Wang, Xinchao},
-  journal={arXiv preprint arXiv:2411.15098},
-  year={2024}
+  booktitle={Proceedings of the IEEE/CVF International Conference on Computer Vision},
+  year={2025}
 }
 
-@article{tan2025ominicontrol2,
-  title={OminiControl2: Efficient Conditioning for Diffusion Transformers},
+@inproceedings{tan2026ominicontrol2,
+  title={Ominicontrol2: Efficient conditioning for diffusion transformers},
   author={Tan, Zhenxiong and Xue, Qiaochu and Yang, Xingyi and Liu, Songhua and Wang, Xinchao},
-  journal={arXiv preprint arXiv:2503.08280},
-  year={2025}
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages={4256--4265},
+  year={2026}
 }
 ```

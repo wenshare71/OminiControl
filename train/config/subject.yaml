@@ -50,5 +50,6 @@ train:
   # (To use AdamW Optimizer, uncomment the following lines)
   # optimizer:
   #   type: AdamW
-  #   lr: 1e-4
-  #   weight_decay: 0.001
+  #   params:
+  #     lr: 1e-4
+  #     weight_decay: 0.001
