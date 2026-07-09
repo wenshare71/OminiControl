@@ -12,19 +12,33 @@ OminiControl2 · Feature Reuse (KV-Cache) 复现基准脚本
     不是单条件端到端。所以本脚本【必须扫 num_conditions】才能看到接近论文的曲线——
     KV-Cache 省掉的计算量 ∝ (条件分支数 × (总步数 - 1)),条件越多、步数越多,收益越大。
 
+多卡 dispatch 说明(24 GB 卡必读):
+  FLUX.1-dev bf16 全量 ≈ 33 GB(text_encoder 1.7 + text_encoder_2 9.5 + transformer 22.4
+  + vae 0.3,GiB 口径),单张 24 GB 4090 装不下。经过远程机器 11 次失败排查
+  (见 repro/REPRODUCE_FEATURE_REUSE_STATUS.md / repro/TROUBLESHOOTING.md),
+  最终采用"单拦截点"方案:
+    * cuda:0 是主场:encoders + vae + latents + scheduler 全在 cuda:0,
+      generate() 内部逻辑完全不感知多卡;
+    * cuda:1 只放 transformer(整块不拆,22.4 GiB 恰好放得下一张 4090);
+    * 在 omini.transformer_forward 入口装"跨卡桥"(install_tx_bridge):
+      白名单输入搬进 cuda:1,输出搬回 cuda:0。
+  这消灭了此前所有 addmm / index_select / scheduler.step / vae.decode 跨卡报错,
+  且不需要 patch encoder/vae 的输出(旧方案的补丁已删除——它们把张量推向
+  cuda:1,反而是制造设备混乱的来源)。
+
 前置条件:
   1. 在仓库根目录运行(保证 `import omini` 可用),或用 --repo-root 指定。
   2. LoRA 必须用 `independent_condition: true` 训练(train/script/train_feature_reuse.sh)。
      用未独立训练的权重也能跑、速度数字有效,但质量对比无意义(会掉),脚本会告警。
 
 用法示例:
-  python kvcache_benchmark.py \
+  python repro/kvcache_benchmark.py \
       --lora-repo runs/feature_reuse_canny/ckpt --lora-weight pytorch_lora_weights.safetensors \
       --adapter-name canny --condition-type canny \
       --steps 8,20,28 --conditions 1,2,3 --repeats 3 --image assets/vase_hq.jpg
 
   # 冒烟测试(拿现成 v1 权重先验证管线,质量不作数):
-  python kvcache_benchmark.py --lora-repo Yuanshi/OminiControl \
+  python repro/kvcache_benchmark.py --lora-repo Yuanshi/OminiControl \
       --lora-weight experimental/canny.safetensors --adapter-name canny \
       --condition-type canny --steps 8 --conditions 1 --repeats 2 --no-independent-check
 """
@@ -53,7 +67,7 @@ class BenchResult:
     kv_cache: bool
     wall_s: float          # 中位墙钟(秒/张)
     wall_std: float
-    peak_mem_gb: float     # 峰值显存
+    peak_mem_gb: float     # 峰值显存(所有 GPU 中的最大值)
     samples: List = field(default_factory=list)  # 生成图,用于质量对比
 
 
@@ -74,43 +88,171 @@ def parse_args():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--guidance-scale", type=float, default=3.5)  # dev 蒸馏值,勿动
     p.add_argument("--size", type=int, default=512)
+    p.add_argument("--dispatch", default="auto", choices=["auto", "single", "2gpu"],
+                   help="auto: GPU0 显存 >=40GB 用 single,否则 2gpu")
     p.add_argument("--no-independent-check", action="store_true",
                    help="跳过 independent_condition 权重检查(冒烟测试用)")
-    p.add_argument("--out", default="kvcache_results", help="输出目录")
+    p.add_argument("--out", default="repro/kvcache_results", help="输出目录")
     return p.parse_args()
 
 
-def _sync():
-    """CUDA 是异步的:计时前后必须 synchronize,否则量到的是"提交时间"而非"执行时间"。"""
+# ======================================================================
+# 跨卡工具(可被 notebook 直接 import 复用)
+# ======================================================================
+
+def _sync_all():
+    """CUDA 是异步的:计时前后必须 synchronize,否则量到的是"提交时间"而非"执行时间"。
+    多卡 dispatch 下要对【每张】用到的卡 sync,不带参的 synchronize 只同步当前卡。"""
     import torch
     if torch.cuda.is_available():
-        torch.cuda.synchronize()
+        for d in range(torch.cuda.device_count()):
+            torch.cuda.synchronize(d)
 
 
-def time_one(gen_fn, repeats: int):
-    """跑 1 次 warmup(触发 kernel 编译/autotune)+ repeats 次计时,返回中位数与标准差。"""
-    import statistics
+def _move(obj, dev):
+    """递归把 tensor / list / tuple 里的 tensor 搬到 dev;其它类型原样返回。"""
     import torch
-
-    # warmup —— 第一次调用包含 CUDA 图/kernel 编译开销,计进去会严重高估
-    _ = gen_fn()
-    _sync()
-
-    times = []
-    torch.cuda.reset_peak_memory_stats()
-    for _ in range(repeats):
-        _sync()
-        t0 = time.perf_counter()
-        out = gen_fn()
-        _sync()
-        times.append(time.perf_counter() - t0)
-    peak = torch.cuda.max_memory_allocated() / (1024 ** 3)
-    med = statistics.median(times)
-    std = statistics.pstdev(times) if len(times) > 1 else 0.0
-    return med, std, peak, out
+    if isinstance(obj, torch.Tensor):
+        return obj.to(dev)
+    if isinstance(obj, list):
+        return [_move(x, dev) for x in obj]
+    if isinstance(obj, tuple):
+        return tuple(_move(x, dev) for x in obj)
+    return obj
 
 
-def build_conditions(n_cond, args, Condition, convert_to_condition):
+# 只搬这些 kwargs。WHY 白名单而不是"递归全搬":
+#   cache_storage 是靠【list 对象身份】在多步之间共享的 KV 缓存容器
+#   (write 时 append、read 时读同一个 list)。递归重建会把 write 写进副本、
+#   read 读到空缓存 —— KV-Cache 直接失效且很难排查。
+_TX_BRIDGE_KEYS = (
+    "image_features", "text_features", "img_ids", "txt_ids",
+    "pooled_projections", "timesteps", "guidances", "group_mask",
+)
+
+
+def install_tx_bridge():
+    """给 omini.transformer_forward 装"跨卡桥":
+
+    输入(白名单)搬到 transformer 所在卡,输出搬回主 latent 所在卡("主场",cuda:0)。
+    这样 generate() 里的 scheduler.step / vae.decode / 随机数全程留在主场,
+    整条管线只有这一个跨卡拦截点。幂等:重复调用(notebook 重跑 cell)不会套两层。
+    """
+    import torch
+    import omini.pipeline.flux_omini as omini_mod
+
+    if getattr(omini_mod.transformer_forward, "_is_tx_bridge", False):
+        log.info("tx bridge 已安装,跳过")
+        return
+    orig = omini_mod.transformer_forward
+
+    def bridge(transformer, *args, **kwargs):
+        tx_dev = next(transformer.parameters()).device
+        feats = kwargs.get("image_features") or (args[0] if args else None)
+        home_dev = feats[0].device if feats else tx_dev
+        # generate() 除 transformer 外全用 kwargs;万一有 positional 也一并搬
+        args = tuple(_move(a, tx_dev) for a in args)
+        for k in _TX_BRIDGE_KEYS:
+            if k in kwargs:
+                kwargs[k] = _move(kwargs[k], tx_dev)
+        out = orig(transformer, *args, **kwargs)
+        # 输出搬回主场:scheduler.step 需要 noise_pred 与 latents 同卡
+        return _move(out, home_dev)
+
+    bridge._is_tx_bridge = True
+    omini_mod.transformer_forward = bridge
+    log.info("已安装 tx bridge:输入 -> transformer 卡,输出 -> 主场卡")
+
+
+def sweep_devices(pipe):
+    """把每个子模块的所有 param/buffer 强行搬到该模块自己的 device。
+
+    WHY:PEFT 的 load_lora_weights/set_adapters 在多卡 dispatch 下可能把新建的
+    LoRA 权重放在 cuda:0(它以 text_encoder 所在卡当"模型 device"),导致
+    transformer 内部 forward 撞设备(远程机器失败 #11)。必须在 set_adapters
+    【之后】调用。"""
+    moved = 0
+    for module in (pipe.transformer, pipe.text_encoder, pipe.text_encoder_2, pipe.vae):
+        target = next(module.parameters()).device
+        for p in module.parameters():
+            if p.device != target:
+                p.data = p.data.to(target)
+                moved += 1
+        for b in module.buffers():
+            if b.device != target:
+                b.data = b.data.to(target)
+                moved += 1
+    log.info("device 安全网:搬了 %d 个 param/buffer", moved)
+    return moved
+
+
+def load_pipeline(flux_path="black-forest-labs/FLUX.1-dev", dispatch="auto"):
+    """加载 FLUX pipeline,按显存自动选择放置策略。
+
+    single: 整个 pipeline .to("cuda")(需要单卡 >= 40 GB)。
+    2gpu:   encoders+vae -> cuda:0,transformer 整块 -> cuda:1,并安装 tx bridge。
+            关键:transformer 必须整块放一张卡;accelerate 的 device_map="balanced"
+            会按权重把它切到多张卡,内部 matmul 直接跨卡报错(失败 #6)。
+    """
+    import torch
+    from diffusers import FluxPipeline
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("未检测到 CUDA GPU;KV-Cache 基准必须在 GPU 上跑。")
+
+    n_gpu = torch.cuda.device_count()
+    gpu0_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+    for d in range(n_gpu):
+        log.info("GPU %d: %s | %.1f GB", d, torch.cuda.get_device_name(d),
+                 torch.cuda.get_device_properties(d).total_memory / (1024 ** 3))
+
+    if dispatch == "auto":
+        dispatch = "single" if gpu0_gb >= 40 else "2gpu"
+        log.info("dispatch=auto -> 选择 %s(GPU0 %.0f GB)", dispatch, gpu0_gb)
+
+    if dispatch == "single":
+        log.info("加载 FLUX pipeline: %s (bf16, 单卡)", flux_path)
+        pipe = FluxPipeline.from_pretrained(flux_path, torch_dtype=torch.bfloat16).to("cuda")
+        return pipe
+
+    if dispatch != "2gpu":
+        raise ValueError(f"未知 dispatch: {dispatch}")
+    if n_gpu < 2:
+        raise RuntimeError(
+            f"2gpu 策略需要至少 2 张 GPU(当前 {n_gpu} 张)。"
+            "单张小卡请看 repro/TROUBLESHOOTING.md 的量化退路方案。")
+
+    log.info("加载 FLUX pipeline: %s (bf16, 2gpu 手工 dispatch)", flux_path)
+    pipe = FluxPipeline.from_pretrained(flux_path, torch_dtype=torch.bfloat16)
+    pipe.text_encoder.to("cuda:0")
+    pipe.text_encoder_2.to("cuda:0")
+    pipe.vae.to("cuda:0")
+    pipe.transformer.to("cuda:1")
+    log.info("dispatch 完成: cuda:0 = encoders+vae+latents(主场), cuda:1 = transformer")
+
+    # generate() 用 pipe._execution_device 创建 latents/timesteps 等,必须是主场 cuda:0。
+    # diffusers 取 components 里第一个 nn.Module 的 device,正常应命中 cuda:0 的模块;
+    # 若未来 diffusers 改了顺序命中 transformer,这里立刻报错而不是深处炸 addmm。
+    exec_dev = str(pipe._execution_device)
+    if exec_dev != "cuda:0":
+        raise RuntimeError(
+            f"pipe._execution_device 是 {exec_dev},预期 cuda:0。"
+            "diffusers 版本行为变化,见 repro/TROUBLESHOOTING.md §设备排查。")
+
+    install_tx_bridge()
+    return pipe
+
+
+def attach_lora(pipe, lora_repo, lora_weight, adapter_name):
+    """加载并激活 LoRA,随后做 device sweep(多卡下必须,单卡下无副作用)。"""
+    log.info("加载 LoRA: %s :: %s", lora_repo, lora_weight)
+    pipe.load_lora_weights(lora_repo, weight_name=lora_weight, adapter_name=adapter_name)
+    pipe.set_adapters([adapter_name])
+    sweep_devices(pipe)
+    return pipe
+
+
+def build_conditions(n_cond, image_path, condition_type, adapter_name, size=512):
     """
     构造 n_cond 路条件分支。
 
@@ -120,11 +262,40 @@ def build_conditions(n_cond, args, Condition, convert_to_condition):
     若要做多条件【质量】复现,应换成不同任务的条件图 + 各自的 adapter(见 train_multi_condition)。
     """
     from PIL import Image
-    img = Image.open(args.image).convert("RGB").resize((args.size, args.size))
-    cond_img = convert_to_condition(args.condition_type, img)
-    # position_delta=(0,0):spatial 对齐任务让条件与生成图共享坐标系(见 train/README)
-    return [Condition(cond_img, args.adapter_name) for _ in range(n_cond)]
+    from omini.pipeline.flux_omini import Condition, convert_to_condition
+    img = Image.open(image_path).convert("RGB").resize((size, size))
+    cond_img = convert_to_condition(condition_type, img)
+    return [Condition(cond_img, adapter_name) for _ in range(n_cond)]
 
+
+def time_one(gen_fn, repeats: int):
+    """跑 1 次 warmup(触发 kernel 编译/autotune)+ repeats 次计时,返回中位数与标准差。"""
+    import statistics
+    import torch
+
+    # warmup —— 第一次调用包含 CUDA 图/kernel 编译开销,计进去会严重高估
+    _ = gen_fn()
+    _sync_all()
+
+    times = []
+    for d in range(torch.cuda.device_count()):
+        torch.cuda.reset_peak_memory_stats(d)
+    for _ in range(repeats):
+        _sync_all()
+        t0 = time.perf_counter()
+        out = gen_fn()
+        _sync_all()
+        times.append(time.perf_counter() - t0)
+    peak = max(torch.cuda.max_memory_allocated(d)
+               for d in range(torch.cuda.device_count())) / (1024 ** 3)
+    med = statistics.median(times)
+    std = statistics.pstdev(times) if len(times) > 1 else 0.0
+    return med, std, peak, out
+
+
+# ======================================================================
+# CLI 主流程
+# ======================================================================
 
 def run():
     args = parse_args()
@@ -132,133 +303,13 @@ def run():
 
     try:
         import torch
-        from diffusers import FluxPipeline
-        from omini.pipeline.flux_omini import Condition, generate, convert_to_condition
+        from omini.pipeline.flux_omini import generate
     except ImportError as e:
         log.error("导入失败,确认在仓库根目录且已 pip install -r requirements.txt:%s", e)
         raise
 
-    if not torch.cuda.is_available():
-        log.error("未检测到 CUDA GPU;KV-Cache 基准必须在 GPU 上跑。")
-        sys.exit(1)
-
-    log.info("GPU: %s | 显存 %.1f GB",
-             torch.cuda.get_device_name(0),
-             torch.cuda.get_device_properties(0).total_memory / (1024 ** 3))
-
-    # ---- 加载 pipeline + LoRA ----
-    # FLUX.1-dev bf16 整体约 36 GB(text_encoder_2 ~10 + transformer ~24 + text_encoder ~2 + vae 0.3)，
-    # 单张 24 GB 4090 装不下。多种 offload/device_map 都踩过坑:
-    #   - .to("cuda"): OOM
-    #   - model_cpu_offload: VAE slow_conv2d_forward 设备不一致
-    #   - sequential_cpu_offload: diffusers 0.38 + accelerate 1.14 bug,把全部 module 移到了 meta 设备
-    #   - device_map=balanced: accelerate 拆 transformer 跨卡,内部 matmul 跨卡炸
-    # 修法:手工 dispatch——
-    #   * text_encoder (~1.7) + text_encoder_2 (~9.5) + vae (~0.3) → cuda:0 (~11.5 GB)
-    #   * transformer (~24 GB) 整块不拆 → cuda:1
-    # 关键:transformer 必须整块放一卡;accelerate 的 balanced 会按权重切 submodule 切坏。
-    n_gpu = torch.cuda.device_count()
-    log.info("加载 FLUX pipeline: %s (bf16) + 手工 dispatch(0: encoders+vae, 1: transformer)", args.flux_path)
-    pipe = FluxPipeline.from_pretrained(
-        args.flux_path,
-        torch_dtype=torch.bfloat16,
-        low_cpu_mem_usage=False,
-    )
-    if n_gpu < 2:
-        log.error("本策略需要至少 2 张 GPU,当前只有 %d 张", n_gpu)
-        sys.exit(1)
-    pipe.text_encoder.to("cuda:0")
-    pipe.text_encoder_2.to("cuda:0")
-    pipe.vae.to("cuda:0")
-    pipe.transformer.to("cuda:1")
-    # pipe.device 保持默认(cuda:0,跟 text_encoder 一致):让 token 输入 .to(pipe.device) 去
-    # encoders 不撞 device。
-    # 跨卡的搬运统一在 omini 的 transformer_forward 入口处理:把所有 list of tensor
-    # 一次性搬到 transformer.device(cuda:1)。这覆盖 latents / text_features / img_ids /
-    # txt_ids / pooled_projections / timesteps / guidances 全部。
-    log.info("dispatch 完成: cuda:0 encoders+vae, cuda:1 transformer")
-
-    from omini.pipeline.flux_omini import transformer_forward as _omni_tx_fwd
-
-    def _tx_fwd_cuda1_wrapper(*args, **kwargs):
-        tx = kwargs.get("transformer") or args[0]
-        tx_dev = tx.device
-        for k in ("image_features", "text_features", "img_ids", "txt_ids",
-                 "pooled_projections", "timesteps", "guidances"):
-            v = kwargs.get(k)
-            if v is None and k == "image_features":
-                v = args[1]
-            if v is not None and isinstance(v, list):
-                moved = []
-                for t in v:
-                    if isinstance(t, torch.Tensor) and t.device != tx_dev:
-                        log.info("  move %s %s %s -> %s", k, tuple(t.shape), t.device, tx_dev)
-                        t = t.to(tx_dev)
-                    moved.append(t)
-                kwargs[k] = moved
-        return _omni_tx_fwd(*args, **kwargs)
-
-    # 把 omini 模块级函数换成我们的 wrapper,所有 import 此函数的 omini 路径都会跟着变
-    import omini.pipeline.flux_omini as _omni_mod
-    _omni_mod.transformer_forward = _tx_fwd_cuda1_wrapper
-    # 同时在 omini 内部的 generate() 也会用 module-level transformer_forward
-    log.info("已 patch omini.transformer_forward: 所有输入 tensor 搬到 transformer.device")
-
-    # ---- 跨卡补丁:text encoder / vae 输出搬到 transformer 所在卡 ----
-    # 原因:encoders 在 cuda:0、transformer 在 cuda:1 时,encoder 的 hidden_states 是 cuda:0,
-    # 进了 transformer 的 addmm 算子就跟 cuda:1 的 W 撞设备。
-    # monkey-patch 三个 forward,把它们的输出统一搬到 pipe.transformer.device。
-    # 只发生在 forward 调用时(每张图一次),代价是一次 12 GB 的 H2D/D2D 拷贝,可接受。
-    _tx_dev = pipe.transformer.device
-
-    def _patch_module_output_to_tx(mod, original_forward):
-        def wrapped(*args, **kwargs):
-            out = original_forward(*args, **kwargs)
-            return _move_to(out, _tx_dev)
-        return wrapped
-
-    def _move_to(obj, dev):
-        # transformers.ModelOutput(如 BaseModelOutputWithPooling)和
-        # diffusers.utils.BaseOutput(如 AutoencoderKLOutput、DecoderOutput)都是
-        # OrderedDict 子类,没有 .to() 方法,isinstance(obj, dict) 会命中。
-        # 这种情况必须重建同类型实例,否则会丢 .last_hidden_state / .latent_dist 等属性。
-        from transformers.utils import ModelOutput
-        from diffusers.utils.outputs import BaseOutput
-        if isinstance(obj, torch.Tensor):
-            return obj.to(dev)
-        if isinstance(obj, (ModelOutput, BaseOutput)):
-            return obj.__class__(**{k: _move_to(v, dev) for k, v in obj.items()})
-        if isinstance(obj, tuple):
-            return tuple(_move_to(x, dev) for x in obj)
-        if isinstance(obj, list):
-            return [_move_to(x, dev) for x in obj]
-        if isinstance(obj, dict):
-            return {k: _move_to(v, dev) for k, v in obj.items()}
-        return obj
-
-    pipe.text_encoder.forward = _patch_module_output_to_tx(pipe.text_encoder, pipe.text_encoder.forward)
-    pipe.text_encoder_2.forward = _patch_module_output_to_tx(pipe.text_encoder_2, pipe.text_encoder_2.forward)
-    pipe.vae.encode = _patch_module_output_to_tx(pipe.vae, pipe.vae.encode)
-    pipe.vae.decode = _patch_module_output_to_tx(pipe.vae, pipe.vae.decode)
-    log.info("已 patch encoders/vae forward: 输出搬到 %s", _tx_dev)
-
-    log.info("加载 LoRA: %s :: %s", args.lora_repo, args.lora_weight)
-    pipe.load_lora_weights(args.lora_repo, weight_name=args.lora_weight,
-                           adapter_name=args.adapter_name)
-    pipe.set_adapters([args.adapter_name])
-
-    # ---- 搬运安全网:PEFT 的 load_lora_weights 有时把新加的 LoRA buffer 留在 cuda:0 ----
-    # 跨卡场景下需要强行把 transformer 的所有 param + buffer 全部搬到 transformer.device。
-    moved = 0
-    for module in [pipe.transformer, pipe.text_encoder, pipe.text_encoder_2, pipe.vae]:
-        target_dev = module.device
-        for p in module.parameters():
-            if p.device != target_dev:
-                p.data = p.data.to(target_dev); moved += 1
-        for b in module.buffers():
-            if b.device != target_dev:
-                b.data = b.data.to(target_dev); moved += 1
-    log.info("device 安全网:搬了 %d 个 param/buffer 到目标 device", moved)
+    pipe = load_pipeline(args.flux_path, dispatch=args.dispatch)
+    attach_lora(pipe, args.lora_repo, args.lora_weight, args.adapter_name)
 
     if not args.no_independent_check:
         log.warning(
@@ -270,11 +321,13 @@ def run():
 
     results: List[BenchResult] = []
     for n_cond in cond_list:
-        conditions = build_conditions(n_cond, args, Condition, convert_to_condition)
+        conditions = build_conditions(n_cond, args.image, args.condition_type,
+                                      args.adapter_name, args.size)
         for steps in steps_list:
             for kv in (False, True):
                 def gen_fn(kv=kv, steps=steps, conditions=conditions):
-                    g = torch.Generator(device="cuda").manual_seed(args.seed)
+                    # generator 在主场 cuda:0:latents 由它产出,必须与 scheduler 同卡
+                    g = torch.Generator(device="cuda:0").manual_seed(args.seed)
                     return generate(
                         pipe,
                         prompt=args.prompt,
@@ -297,12 +350,12 @@ def run():
                 results.append(BenchResult(steps, n_cond, kv, med, std, peak, [out]))
                 log.info("  -> %.3fs ±%.3f | 峰值显存 %.2f GB", med, std, peak)
 
-    _report(results, args)
+    _report(results, args.out)
 
 
-def _report(results: List[BenchResult], args):
+def _report(results: List[BenchResult], out_dir):
     """打印加速比表格 + 存生成图(供肉眼/后续 CLIP-FID 质量核对)。"""
-    os.makedirs(args.out, exist_ok=True)
+    os.makedirs(out_dir, exist_ok=True)
     # 建立 (n_cond, steps) -> {False: r, True: r} 便于算 speedup
     idx = {}
     for r in results:
@@ -320,10 +373,10 @@ def _report(results: List[BenchResult], args):
         print(f"{n_cond:>6} {steps:>6} {base.wall_s:>12.3f} {kv.wall_s:>12.3f} "
               f"{speedup:>7.2f}x {base.peak_mem_gb:>8.2f}G {kv.peak_mem_gb:>7.2f}G")
         # 存两张图供质量对比:独立训练的 LoRA 下两者应近乎一致
-        base.samples[0].save(os.path.join(args.out, f"c{n_cond}_s{steps}_base.png"))
-        kv.samples[0].save(os.path.join(args.out, f"c{n_cond}_s{steps}_kv.png"))
+        base.samples[0].save(os.path.join(out_dir, f"c{n_cond}_s{steps}_base.png"))
+        kv.samples[0].save(os.path.join(out_dir, f"c{n_cond}_s{steps}_kv.png"))
     print("=" * 74)
-    print(f"生成图已存到 {args.out}/ —— 用独立训练权重时 base 与 kv 两图应几乎相同;")
+    print(f"生成图已存到 {out_dir}/ —— 用独立训练权重时 base 与 kv 两图应几乎相同;")
     print("若明显不同,说明该 LoRA 未按 independent_condition 训练。")
 
 

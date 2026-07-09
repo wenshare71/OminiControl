@@ -93,8 +93,14 @@ pip freeze > repro/requirements.lock.txt   # 复现出问题时的对照基线
 先用**现成的 v1 canny 权重**跑通全链路(FLUX 加载 → LoRA 挂载 → `generate()`)。
 此阶段**只验证管线和速度,质量不作数**(v1 权重不是独立训练的)。
 
+**推荐方式(24 GB 卡的机器)**:直接从上到下运行 `repro/stage1_smoke_test.ipynb`——
+内置环境自检、2 卡 dispatch(FLUX bf16 ≈33 GB 单张 24 GB 卡放不下)、跨卡桥和 LoRA device sweep。
+报错按 `repro/TROUBLESHOOTING.md` 分诊。
+
+CLI 等价命令:
+
 ```bash
-# 在仓库根目录运行
+# 在仓库根目录运行(--dispatch auto 会按显存自动选 single / 2gpu)
 python repro/kvcache_benchmark.py \
   --lora-repo Yuanshi/OminiControl \
   --lora-weight experimental/canny.safetensors \

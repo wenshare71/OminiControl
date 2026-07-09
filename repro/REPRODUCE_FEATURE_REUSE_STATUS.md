@@ -1,5 +1,10 @@
 # OminiControl2 · 特征复用复现 · 环境与排错记录
 
+> **2026-07-09 更新:失败 #11 及后续隐患已在本地修复。**
+> 修复后的方案(2gpu dispatch + transformer_forward 跨卡桥 + LoRA device sweep)已落在
+> `repro/kvcache_benchmark.py`;一键冒烟测试用 `repro/stage1_smoke_test.ipynb`;
+> 报错分诊看 `repro/TROUBLESHOOTING.md`。本文件保留为原始失败记录,不再更新。
+
 > 本文件记录阶段一(冒烟测试)的环境配置、踩过的坑、当前状态。
 > 用于在另一台机器或后续会话中复现 / 接手。
 
