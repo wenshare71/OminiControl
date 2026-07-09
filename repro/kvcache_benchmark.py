@@ -147,13 +147,118 @@ def run():
              torch.cuda.get_device_properties(0).total_memory / (1024 ** 3))
 
     # ---- 加载 pipeline + LoRA ----
-    log.info("加载 FLUX pipeline: %s (bf16)", args.flux_path)
-    pipe = FluxPipeline.from_pretrained(args.flux_path, torch_dtype=torch.bfloat16).to("cuda")
+    # FLUX.1-dev bf16 整体约 36 GB(text_encoder_2 ~10 + transformer ~24 + text_encoder ~2 + vae 0.3)，
+    # 单张 24 GB 4090 装不下。多种 offload/device_map 都踩过坑:
+    #   - .to("cuda"): OOM
+    #   - model_cpu_offload: VAE slow_conv2d_forward 设备不一致
+    #   - sequential_cpu_offload: diffusers 0.38 + accelerate 1.14 bug,把全部 module 移到了 meta 设备
+    #   - device_map=balanced: accelerate 拆 transformer 跨卡,内部 matmul 跨卡炸
+    # 修法:手工 dispatch——
+    #   * text_encoder (~1.7) + text_encoder_2 (~9.5) + vae (~0.3) → cuda:0 (~11.5 GB)
+    #   * transformer (~24 GB) 整块不拆 → cuda:1
+    # 关键:transformer 必须整块放一卡;accelerate 的 balanced 会按权重切 submodule 切坏。
+    n_gpu = torch.cuda.device_count()
+    log.info("加载 FLUX pipeline: %s (bf16) + 手工 dispatch(0: encoders+vae, 1: transformer)", args.flux_path)
+    pipe = FluxPipeline.from_pretrained(
+        args.flux_path,
+        torch_dtype=torch.bfloat16,
+        low_cpu_mem_usage=False,
+    )
+    if n_gpu < 2:
+        log.error("本策略需要至少 2 张 GPU,当前只有 %d 张", n_gpu)
+        sys.exit(1)
+    pipe.text_encoder.to("cuda:0")
+    pipe.text_encoder_2.to("cuda:0")
+    pipe.vae.to("cuda:0")
+    pipe.transformer.to("cuda:1")
+    # pipe.device 保持默认(cuda:0,跟 text_encoder 一致):让 token 输入 .to(pipe.device) 去
+    # encoders 不撞 device。
+    # 跨卡的搬运统一在 omini 的 transformer_forward 入口处理:把所有 list of tensor
+    # 一次性搬到 transformer.device(cuda:1)。这覆盖 latents / text_features / img_ids /
+    # txt_ids / pooled_projections / timesteps / guidances 全部。
+    log.info("dispatch 完成: cuda:0 encoders+vae, cuda:1 transformer")
+
+    from omini.pipeline.flux_omini import transformer_forward as _omni_tx_fwd
+
+    def _tx_fwd_cuda1_wrapper(*args, **kwargs):
+        tx = kwargs.get("transformer") or args[0]
+        tx_dev = tx.device
+        for k in ("image_features", "text_features", "img_ids", "txt_ids",
+                 "pooled_projections", "timesteps", "guidances"):
+            v = kwargs.get(k)
+            if v is None and k == "image_features":
+                v = args[1]
+            if v is not None and isinstance(v, list):
+                moved = []
+                for t in v:
+                    if isinstance(t, torch.Tensor) and t.device != tx_dev:
+                        log.info("  move %s %s %s -> %s", k, tuple(t.shape), t.device, tx_dev)
+                        t = t.to(tx_dev)
+                    moved.append(t)
+                kwargs[k] = moved
+        return _omni_tx_fwd(*args, **kwargs)
+
+    # 把 omini 模块级函数换成我们的 wrapper,所有 import 此函数的 omini 路径都会跟着变
+    import omini.pipeline.flux_omini as _omni_mod
+    _omni_mod.transformer_forward = _tx_fwd_cuda1_wrapper
+    # 同时在 omini 内部的 generate() 也会用 module-level transformer_forward
+    log.info("已 patch omini.transformer_forward: 所有输入 tensor 搬到 transformer.device")
+
+    # ---- 跨卡补丁:text encoder / vae 输出搬到 transformer 所在卡 ----
+    # 原因:encoders 在 cuda:0、transformer 在 cuda:1 时,encoder 的 hidden_states 是 cuda:0,
+    # 进了 transformer 的 addmm 算子就跟 cuda:1 的 W 撞设备。
+    # monkey-patch 三个 forward,把它们的输出统一搬到 pipe.transformer.device。
+    # 只发生在 forward 调用时(每张图一次),代价是一次 12 GB 的 H2D/D2D 拷贝,可接受。
+    _tx_dev = pipe.transformer.device
+
+    def _patch_module_output_to_tx(mod, original_forward):
+        def wrapped(*args, **kwargs):
+            out = original_forward(*args, **kwargs)
+            return _move_to(out, _tx_dev)
+        return wrapped
+
+    def _move_to(obj, dev):
+        # transformers.ModelOutput(如 BaseModelOutputWithPooling)和
+        # diffusers.utils.BaseOutput(如 AutoencoderKLOutput、DecoderOutput)都是
+        # OrderedDict 子类,没有 .to() 方法,isinstance(obj, dict) 会命中。
+        # 这种情况必须重建同类型实例,否则会丢 .last_hidden_state / .latent_dist 等属性。
+        from transformers.utils import ModelOutput
+        from diffusers.utils.outputs import BaseOutput
+        if isinstance(obj, torch.Tensor):
+            return obj.to(dev)
+        if isinstance(obj, (ModelOutput, BaseOutput)):
+            return obj.__class__(**{k: _move_to(v, dev) for k, v in obj.items()})
+        if isinstance(obj, tuple):
+            return tuple(_move_to(x, dev) for x in obj)
+        if isinstance(obj, list):
+            return [_move_to(x, dev) for x in obj]
+        if isinstance(obj, dict):
+            return {k: _move_to(v, dev) for k, v in obj.items()}
+        return obj
+
+    pipe.text_encoder.forward = _patch_module_output_to_tx(pipe.text_encoder, pipe.text_encoder.forward)
+    pipe.text_encoder_2.forward = _patch_module_output_to_tx(pipe.text_encoder_2, pipe.text_encoder_2.forward)
+    pipe.vae.encode = _patch_module_output_to_tx(pipe.vae, pipe.vae.encode)
+    pipe.vae.decode = _patch_module_output_to_tx(pipe.vae, pipe.vae.decode)
+    log.info("已 patch encoders/vae forward: 输出搬到 %s", _tx_dev)
 
     log.info("加载 LoRA: %s :: %s", args.lora_repo, args.lora_weight)
     pipe.load_lora_weights(args.lora_repo, weight_name=args.lora_weight,
                            adapter_name=args.adapter_name)
     pipe.set_adapters([args.adapter_name])
+
+    # ---- 搬运安全网:PEFT 的 load_lora_weights 有时把新加的 LoRA buffer 留在 cuda:0 ----
+    # 跨卡场景下需要强行把 transformer 的所有 param + buffer 全部搬到 transformer.device。
+    moved = 0
+    for module in [pipe.transformer, pipe.text_encoder, pipe.text_encoder_2, pipe.vae]:
+        target_dev = module.device
+        for p in module.parameters():
+            if p.device != target_dev:
+                p.data = p.data.to(target_dev); moved += 1
+        for b in module.buffers():
+            if b.device != target_dev:
+                b.data = b.data.to(target_dev); moved += 1
+    log.info("device 安全网:搬了 %d 个 param/buffer 到目标 device", moved)
 
     if not args.no_independent_check:
         log.warning(
