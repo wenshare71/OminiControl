@@ -117,13 +117,22 @@ python repro/kvcache_benchmark.py \
 
 HF 上**没有提供** feature-reuse 的预训练权重,必须自己训。配置 `train/config/feature_reuse.yaml` 已就绪(`independent_condition: true`、canny、512×512)。
 
-```bash
-# 5.1 下数据(text-to-image-2M;默认脚本只下少量,足够先验证收敛)
-bash train/script/data_download/data_download2.sh
+**推荐方式(24 GB 卡的机器)**:从上到下运行 `repro/stage2_train.ipynb`——后台启动训练、
+监控 loss/显存/ckpt、预览采样图、手动停止,全部一键。
+⚠️ 上游训练入口把整个 pipeline(≈33 GiB)搬上一张卡,24 GB 卡**加载即 OOM**,
+notebook 用 `repro/train_feature_reuse_24gb.py` 启动:自动做 2 卡拆分
+(cuda:0 = transformer+LoRA+优化器,cuda:1 = 冻结 encoders+vae,与推理侧布局**相反**),
+零改动上游文件。报错按 `repro/TROUBLESHOOTING.md` §7 分诊。
 
-# 5.2 起训(单/多卡由 CUDA_VISIBLE_DEVICES 控制,见脚本注释)
-#     可选:export WANDB_API_KEY=... 打开可视化
-bash train/script/train_feature_reuse.sh
+CLI 等价命令(≥40 GB 单卡则用原始脚本):
+
+```bash
+# 24 GB 卡(2 卡拆分,自动判断)
+python repro/train_feature_reuse_24gb.py
+
+# ≥40 GB 单卡(原始路径;数据首启动时自动下载,或先跑 5.1)
+bash train/script/data_download/data_download2.sh   # 5.1 可选预下载
+bash train/script/train_feature_reuse.sh            # 5.2 起训;可选 export WANDB_API_KEY=...
 ```
 
 要点:
@@ -137,6 +146,11 @@ bash train/script/train_feature_reuse.sh
 ---
 
 ## 6. 阶段三 · 正式测量(用阶段二训出的权重)
+
+**推荐方式**:从上到下运行 `repro/stage3_benchmark.ipynb`——自动找最新 ckpt、
+扫 (条件数×步数) 网格、单配置 OOM 自动跳过、输出加速比表 + 像素 MAE 质量核对 + 并排预览。
+
+CLI 等价命令:
 
 ```bash
 python repro/kvcache_benchmark.py \

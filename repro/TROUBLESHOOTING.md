@@ -1,6 +1,8 @@
 # OminiControl2 · KV-Cache 复现 · 修复手册
 
-> 配套文件:`repro/stage1_smoke_test.ipynb`(一键冒烟测试)、`repro/kvcache_benchmark.py`(CLI 基准)、
+> 配套文件:`repro/stage1_smoke_test.ipynb`(一键冒烟测试)、`repro/stage2_train.ipynb`(一键训练)、
+> `repro/stage3_benchmark.ipynb`(一键正式测量)、`repro/kvcache_benchmark.py`(CLI 基准)、
+> `repro/train_feature_reuse_24gb.py`(24GB 卡 2-GPU 训练启动器)、
 > `repro/REPRODUCE_FEATURE_REUSE_STATUS.md`(远程机器 11 次失败的原始记录)。
 > 本手册 = 失败记录的**结论版** + **新报错的分诊方法** + **退路方案**。
 
@@ -21,6 +23,11 @@
 | adapter 名字冲突 / 多 LoRA 不生效 | §6.2 |
 | 生成图与条件无关 / 质量差 | §6.3 |
 | 计时抖动大 / 加速比忽高忽低 | §6.4 |
+| **训练**加载/第一步 OOM | §7.1 |
+| Lightning 起了 2 个进程 / 模型加载两遍 | §7.2 |
+| `采样出图失败(训练继续)` | §7.3 |
+| 数据下载卡住 / `cache/t2i2m` | §7.4 |
+| loss 不降 / 阶段三像素 MAE 偏大 | §7.5 |
 
 ---
 
@@ -198,6 +205,47 @@ pipe = FluxPipeline.from_pretrained(FLUX_PATH, transformer=tx,
 ### 6.4 计时抖动大
 - 加大 `--repeats`;确认没有其他进程占卡(`nvidia-smi`);确认没开 offload;
 - 2gpu 模式下 D2D 拷贝极小(每步 ~几百 KB),不构成抖动来源;抖动大多来自共享机器的邻居负载。
+
+---
+
+## 7. 训练阶段(stage2_train.ipynb / train_feature_reuse_24gb.py)
+
+### 7.0 训练侧拆分与推理侧【相反】,别拿 §3 的布局套
+- 训练主角是 transformer(要梯度,必须和 LoRA/优化器同卡)→ **cuda:0 = transformer**,
+  **cuda:1 = 冻结的 encoders + vae**;推理侧正好反过来。
+- 上游 `trainer.py:67-69` 把整个 pipeline(≈33 GiB)`.to()` 上一张卡,24 GB 卡
+  **加载即 OOM** —— 这就是必须用 `repro/train_feature_reuse_24gb.py` 启动的原因。
+  它在运行时 patch:定向放置、encode_images/encode_prompt 输出搬回 cuda:0、
+  钉死 Lightning 单卡、采样路径复用推理侧跨卡桥。零改动上游文件。
+
+### 7.1 加载阶段 OOM / `CUDA out of memory` 出现在训练第一步
+- 先确认走的是启动器而不是 `train_feature_reuse.sh` 直起(日志开头应有
+  `[train24gb] 模式:2-GPU 拆分`)。
+- cuda:0 必须**几乎全空**(需 ≥23 GiB):`nvidia-smi` 清掉占卡进程,包括还没关的阶段一 notebook 内核。
+- 仍 OOM 按顺序:yaml 里 `condition_size`/`target_size` 降到 `[256,256]` →
+  换 yaml 注释里的精简版 `target_modules` → 只能上大显存卡。
+- 启动器已默认 `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` 抗碎片,别删。
+
+### 7.2 Lightning 起了 2 个进程 / 模型被加载两遍
+- 2 卡可见时 `L.Trainer(devices="auto")` 会自作主张开 DDP,把 33 GB 模型加载两遍。
+  启动器已把 devices 钉成训练卡单卡;若绕过启动器自己起训练,必须
+  `CUDA_VISIBLE_DEVICES` 只露一张卡(那又回到 33 GB 单卡 OOM)。
+  拆分模式与多卡 DDP 不兼容,见启动器 docstring。
+
+### 7.3 日志里 `采样出图失败(训练继续)`
+- 采样(test_function → generate)只是监控手段,启动器已兜底不让它打断训练。
+- 常见原因:采样瞬间两张卡同时高水位 → 偶发 OOM,过几个 interval 自己恢复;
+  持续失败则把报错串到 §3/§4 分诊(采样路径与推理共用跨卡桥,主场在 vae 卡)。
+
+### 7.4 数据下载卡住 / `cache/t2i2m` 报错
+- 首次启动 `load_dataset` 要下 2 个 shard(数 GiB)+ `num_proc=32` 解包,十几分钟
+  没有 Loss 行是正常的;日志停在 dataset 相关行超过 30 分钟才算异常。
+- 磁盘满会表现为 webdataset 解包错误:`df -h .` 确认 ≥15 GiB 空闲后删 `cache/t2i2m` 重来。
+
+### 7.5 loss 不降 / 样图不贴合 canny / 阶段三像素 MAE 偏大
+- Prodigy(lr=1)前几百步波动大属正常,看 500 步以上的趋势。
+- 确认用的是 `feature_reuse.yaml`(`independent_condition: true`);拿错 config 训出来的
+  权重在阶段三的症状是:速度数字正常,但 base/kv 两图差异大(像素 MAE 高)。
 
 ---
 
