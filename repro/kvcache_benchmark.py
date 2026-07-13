@@ -60,6 +60,16 @@ logging.basicConfig(
 log = logging.getLogger("kvbench")
 
 
+# ---- 关键 workaround:torch 2.8 + diffusers 0.38 在某些 GPU 上跑 VAE 的
+#      conv2d 时 cuDNN 报 CUDNN_STATUS_NOT_INITIALIZED(同 Stage 2 训练时的
+#      同一个 bug,只是这次 VAE 在 cuda:0 而非 cuda:1)。让 F.conv2d 走
+#      原生 eager 路径即可解决,FLUX 推理不需要 cuDNN 加速。
+#      必须在首次 cuda op 之前设置。 ----
+import torch  # noqa: E402
+torch.backends.cudnn.enabled = False
+log.info("cudnn disabled (workaround for VAE CUDNN_STATUS_NOT_INITIALIZED)")
+
+
 @dataclass
 class BenchResult:
     steps: int

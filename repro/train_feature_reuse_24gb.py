@@ -55,6 +55,13 @@ log = logging.getLogger("train24gb")
 
 import torch  # noqa: E402
 
+# ---- 关键 workaround:torch 2.8 + diffusers 0.38 在 cuda:1 上跑 vae 的 conv2d 时
+#      cuDNN 报 CUDNN_STATUS_NOT_INITIALIZED(实测 vae 244 个参数/buffer 全在 cuda:1,
+#      输入也已显式搬到 cuda:1,问题在 cuDNN backend 自身对 cuda:1 的 lazy-init)。
+#      关掉 cuDNN 让 F.conv2d 走原生 eager 路径,可解决;FLUX 训练不需要 cuDNN 加速。 ----
+torch.backends.cudnn.enabled = False
+log.info("cudnn disabled (workaround for cuda:1 CUDNN_STATUS_NOT_INITIALIZED)")
+
 TX_DEV = torch.device(os.environ.get("OMINI_TX_DEV", "cuda:0"))   # transformer + LoRA + 优化器
 ENC_DEV = torch.device(os.environ.get("OMINI_ENC_DEV", "cuda:1"))  # 冻结的 encoders + vae
 
@@ -106,6 +113,11 @@ def _install_split_patches():
     _orig_encode_images = trainer_mod.encode_images
 
     def _encode_images_bridge(pipeline, images):
+        # imgs 来自 dataloader,默认在 self.device(=TX_DEV=cuda:0);
+        # 原 encode_images 内部会 .to(pipeline.device) 搬到 vae 卡(cuda:1),
+        # 但这一段有时序竞争,显式同步搬一次更稳。
+        if torch.is_tensor(images) and images.device != torch.device(pipeline.device):
+            images = images.to(pipeline.device)
         tokens, ids = _orig_encode_images(pipeline, images)
         return tokens.to(TX_DEV), ids.to(TX_DEV)
 

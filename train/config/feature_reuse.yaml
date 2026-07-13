@@ -29,11 +29,11 @@ train:
       - "https://huggingface.co/datasets/jackyhate/text-to-image-2M/resolve/main/data_512_2M/data_000046.tar"
     cache_name: "data_512_2M"
     condition_size: 
-      - 512
-      - 512
+      - 256
+      - 256
     target_size: 
-      - 512
-      - 512
+      - 256
+      - 256
     drop_text_prob: 0.1
     drop_image_prob: 0.1
 
