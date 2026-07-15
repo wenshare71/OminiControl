@@ -67,6 +67,12 @@ huggingface-cli login            # 贴入有该模型访问权的 token
 
 ## 3. 环境搭建
 
+> 📌 **在快手 IDC 那台机器(`aiplatform-bjy-ge47-391`)上,别照抄本节。**
+> 那台机器上 conda 已随重启消失,且 `/home` 是 Ceph 网络盘 —— venv 建错位置会卡 70 分钟。
+> 直接用:`source train/setup_env.sh`(venv 缺失会自动重建)。
+> 机器现状见 [`../MACHINE_STATUS.md`](../MACHINE_STATUS.md),踩坑详情见 [`ENV_REBUILD.md`](ENV_REBUILD.md)。
+> 本节保留为**通用**搭建流程,供其它机器参考。
+
 ```bash
 conda create -n omini python=3.12 -y
 conda activate omini

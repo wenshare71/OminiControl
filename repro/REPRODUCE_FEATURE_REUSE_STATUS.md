@@ -1,5 +1,11 @@
 # OminiControl2 · 特征复用复现 · 环境与排错记录
 
+> 🔴 **2026-07-15:本文件 §1(机器环境)已全部过期,不要照做。**
+> 机器重启后 `/root` 回滚,**conda 和 `/root/miniconda3/envs/omini` 已不存在**;
+> 现在用 uv + `/root/omini-venv`,`HF_HOME` 也已迁到 Ceph 持久盘。
+> **当前环境看 [`../MACHINE_STATUS.md`](../MACHINE_STATUS.md),重建步骤看 [`ENV_REBUILD.md`](ENV_REBUILD.md)。**
+> §2 之后的复现记录与失败分析仍然有效。
+
 > **2026-07-09 更新:失败 #11 及后续隐患已在本地修复。**
 > 修复后的方案(2gpu dispatch + transformer_forward 跨卡桥 + LoRA device sweep)已落在
 > `repro/kvcache_benchmark.py`;一键冒烟测试用 `repro/stage1_smoke_test.ipynb`;
