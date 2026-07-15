@@ -13,4 +13,5 @@ protobuf
 sentencepiece
 gradio
 jupyter
+matplotlib          # repro/ 下的可视化 cell 需要(repro/quality_compare.ipynb 第 6 块)
 torchao
