@@ -1,0 +1,20 @@
+{
+  "case": "room",
+  "mode": "default",
+  "seed": 42,
+  "steps": 28,
+  "every": 4,
+  "n_snapshots": 8,
+  "wall_s": 6.34,
+  "strip_png": "room_default_trajectory.png",
+  "snapshot_labels": [
+    "step 0/28\n(noise)",
+    "step 4/28",
+    "step 8/28",
+    "step 12/28",
+    "step 16/28",
+    "step 20/28",
+    "step 24/28",
+    "step 28/28"
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "annotations": {
+    "vase_s42": {
+      "prompt": "A beautiful ceramic vase with flowers on a wooden table, soft light.",
+      "choices": {
+        "quality": ""
+      }
+    },
+    "vase_s1234": {
+      "prompt": "A beautiful ceramic vase with flowers on a wooden table, soft light.",
+      "choices": {
+        "quality": ""
+      }
+    },
+    "room_s42": {
+      "prompt": "A cozy room corner with an armchair and warm afternoon lighting.",
+      "choices": {
+        "quality": ""
+      }
+    },
+    "room_s1234": {
+      "prompt": "A cozy room corner with an armchair and warm afternoon lighting.",
+      "choices": {
+        "quality": ""
+      }
+    },
+    "oranges_s42": {
+      "prompt": "Fresh ripe oranges on a plate, studio product photography.",
+      "choices": {
+        "quality": ""
+      }
+    },
+    "oranges_s1234": {
+      "prompt": "Fresh ripe oranges on a plate, studio product photography.",
+      "choices": {
+        "quality": ""
+      }
+    },
+    "clock_s42": {
+      "prompt": "A vintage alarm clock on a desk, detailed, photorealistic.",
+      "choices": {
+        "quality": ""
+      }
+    },
+    "clock_s1234": {
+      "prompt": "A vintage alarm clock on a desk, detailed, photorealistic.",
+      "choices": {
+        "quality": ""
+      }
+    },
+    "rc_car_s42": {
+      "prompt": "A red remote control toy car on the ground, sharp focus.",
+      "choices": {
+        "quality": ""
+      }
+    },
+    "rc_car_s1234": {
+      "prompt": "A red remote control toy car on the ground, sharp focus.",
+      "choices": {
+        "quality": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "vase_s42": {
+    "A": "default",
+    "B": "kvcache"
+  },
+  "vase_s1234": {
+    "A": "default",
+    "B": "kvcache"
+  },
+  "room_s42": {
+    "A": "kvcache",
+    "B": "default"
+  },
+  "room_s1234": {
+    "A": "kvcache",
+    "B": "default"
+  },
+  "oranges_s42": {
+    "A": "default",
+    "B": "kvcache"
+  },
+  "oranges_s1234": {
+    "A": "kvcache",
+    "B": "default"
+  },
+  "clock_s42": {
+    "A": "default",
+    "B": "kvcache"
+  },
+  "clock_s1234": {
+    "A": "kvcache",
+    "B": "default"
+  },
+  "rc_car_s42": {
+    "A": "kvcache",
+    "B": "default"
+  },
+  "rc_car_s1234": {
+    "A": "default",
+    "B": "kvcache"
+  }
+}

@@ -1,0 +1,92 @@
+[
+  {
+    "case": "vase",
+    "seed": 42,
+    "prompt": "A beautiful ceramic vase with flowers on a wooden table, soft light.",
+    "default": "repro/quality_compare_256/vase_s42_default.png",
+    "default_sec": 6.9,
+    "kvcache": "repro/quality_compare_256/vase_s42_kvcache.png",
+    "kvcache_sec": 3.7
+  },
+  {
+    "case": "vase",
+    "seed": 1234,
+    "prompt": "A beautiful ceramic vase with flowers on a wooden table, soft light.",
+    "default": "repro/quality_compare_256/vase_s1234_default.png",
+    "default_sec": 6.2,
+    "kvcache": "repro/quality_compare_256/vase_s1234_kvcache.png",
+    "kvcache_sec": 3.7
+  },
+  {
+    "case": "room",
+    "seed": 42,
+    "prompt": "A cozy room corner with an armchair and warm afternoon lighting.",
+    "default": "repro/quality_compare_256/room_s42_default.png",
+    "default_sec": 6.2,
+    "kvcache": "repro/quality_compare_256/room_s42_kvcache.png",
+    "kvcache_sec": 3.7
+  },
+  {
+    "case": "room",
+    "seed": 1234,
+    "prompt": "A cozy room corner with an armchair and warm afternoon lighting.",
+    "default": "repro/quality_compare_256/room_s1234_default.png",
+    "default_sec": 6.2,
+    "kvcache": "repro/quality_compare_256/room_s1234_kvcache.png",
+    "kvcache_sec": 3.7
+  },
+  {
+    "case": "oranges",
+    "seed": 42,
+    "prompt": "Fresh ripe oranges on a plate, studio product photography.",
+    "default": "repro/quality_compare_256/oranges_s42_default.png",
+    "default_sec": 6.2,
+    "kvcache": "repro/quality_compare_256/oranges_s42_kvcache.png",
+    "kvcache_sec": 3.7
+  },
+  {
+    "case": "oranges",
+    "seed": 1234,
+    "prompt": "Fresh ripe oranges on a plate, studio product photography.",
+    "default": "repro/quality_compare_256/oranges_s1234_default.png",
+    "default_sec": 6.2,
+    "kvcache": "repro/quality_compare_256/oranges_s1234_kvcache.png",
+    "kvcache_sec": 3.7
+  },
+  {
+    "case": "clock",
+    "seed": 42,
+    "prompt": "A vintage alarm clock on a desk, detailed, photorealistic.",
+    "default": "repro/quality_compare_256/clock_s42_default.png",
+    "default_sec": 6.2,
+    "kvcache": "repro/quality_compare_256/clock_s42_kvcache.png",
+    "kvcache_sec": 3.7
+  },
+  {
+    "case": "clock",
+    "seed": 1234,
+    "prompt": "A vintage alarm clock on a desk, detailed, photorealistic.",
+    "default": "repro/quality_compare_256/clock_s1234_default.png",
+    "default_sec": 6.2,
+    "kvcache": "repro/quality_compare_256/clock_s1234_kvcache.png",
+    "kvcache_sec": 3.7
+  },
+  {
+    "case": "rc_car",
+    "seed": 42,
+    "prompt": "A red remote control toy car on the ground, sharp focus.",
+    "default": "repro/quality_compare_256/rc_car_s42_default.png",
+    "default_sec": 6.2,
+    "kvcache": "repro/quality_compare_256/rc_car_s42_kvcache.png",
+    "kvcache_sec": 3.7
+  },
+  {
+    "case": "rc_car",
+    "seed": 1234,
+    "prompt": "A red remote control toy car on the ground, sharp focus.",
+    "default": "repro/quality_compare_256/rc_car_s1234_default.png",
+    "default_sec": 6.2,
+    "kvcache": "repro/quality_compare_256/rc_car_s1234_kvcache.png",
+    "kvcache_sec": 3.7
+  }
+]
