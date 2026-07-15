@@ -508,8 +508,24 @@ def transformer_forward(
         {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
     )
 
+    # 跨卡流水线支持:24G 卡放不下 transformer + LoRA + 双 KV 缓存时,
+    # kvcache_benchmark 的 3gpu dispatch 会把 dual/single blocks 放到不同 GPU。
+    # 只允许在 block 边界切换设备(块内跨卡会炸 matmul,见失败 #6);hidden states
+    # 与逐块复用的 temb/RoPE 随 block 所在卡迁移。单卡时 device 恒相同,零开销,
+    # 训练路径(DDP 单进程单卡)不受影响。
+    def _to_dev(xs, dev):
+        move = lambda t: (t.to(dev) if isinstance(t, torch.Tensor)
+                          else tuple(e.to(dev) for e in t))
+        return [move(x) for x in xs]
+
     # dual branch blocks
     for block in self.transformer_blocks:
+        blk_dev = next(block.parameters()).device
+        if image_hidden_states[0].device != blk_dev:
+            image_hidden_states = _to_dev(image_hidden_states, blk_dev)
+            text_hidden_states = _to_dev(text_hidden_states, blk_dev)
+            tembs = _to_dev(tembs, blk_dev)
+            position_embs = _to_dev(position_embs, blk_dev)
         block_kwargs = {
             "self": block,
             "image_hidden_states": image_hidden_states,
@@ -530,6 +546,11 @@ def transformer_forward(
     # combine image and text hidden states then pass through the single transformer blocks
     all_hidden_states = [*text_hidden_states, *image_hidden_states]
     for block in self.single_transformer_blocks:
+        blk_dev = next(block.parameters()).device
+        if all_hidden_states[0].device != blk_dev:
+            all_hidden_states = _to_dev(all_hidden_states, blk_dev)
+            tembs = _to_dev(tembs, blk_dev)
+            position_embs = _to_dev(position_embs, blk_dev)
         block_kwargs = {
             "self": block,
             "hidden_states": all_hidden_states,
@@ -546,7 +567,12 @@ def transformer_forward(
         else:
             all_hidden_states = single_block_forward(**block_kwargs)
 
-    image_hidden_states = self.norm_out(all_hidden_states[txt_n], tembs[txt_n])
+    # norm_out/proj_out 与末端 single blocks 同卡(3gpu dispatch 如此放置);
+    # .to 同卡是 no-op,单卡路径零开销
+    out_dev = next(self.norm_out.parameters()).device
+    image_hidden_states = self.norm_out(
+        all_hidden_states[txt_n].to(out_dev), tembs[txt_n].to(out_dev)
+    )
     output = self.proj_out(image_hidden_states)
 
     return (output,)

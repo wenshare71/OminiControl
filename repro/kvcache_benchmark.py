@@ -98,8 +98,11 @@ def parse_args():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--guidance-scale", type=float, default=3.5)  # dev 蒸馏值,勿动
     p.add_argument("--size", type=int, default=512)
-    p.add_argument("--dispatch", default="auto", choices=["auto", "single", "2gpu"],
-                   help="auto: GPU0 显存 >=40GB 用 single,否则 2gpu")
+    p.add_argument("--dispatch", default="auto", choices=["auto", "single", "2gpu", "3gpu"],
+                   help="auto: GPU0 显存 >=40GB 用 single,否则 2gpu;"
+                        "3gpu: transformer 按 block 边界二分(挂 LoRA + CFG 时需要)")
+    p.add_argument("--gpu2", type=int, default=None,
+                   help="3gpu dispatch 专用:single blocks + norm_out/proj_out 所在卡")
     p.add_argument("--gpu0", type=int, default=0,
                    help="2gpu dispatch 主场 GPU(encoders+vae+latents)。"
                         "若 cuda:0 被 defunct context 死锁可改用其它空卡")
@@ -163,7 +166,9 @@ def install_tx_bridge():
     orig = omini_mod.transformer_forward
 
     def bridge(transformer, *args, **kwargs):
-        tx_dev = next(transformer.parameters()).device
+        # 入口卡 = x_embedder 所在卡(3gpu dispatch 下 transformer 参数跨多卡,
+        # next(parameters()) 取决于模块定义顺序,不可靠;输入首先进 x_embedder)
+        tx_dev = transformer.x_embedder.weight.device
         feats = kwargs.get("image_features") or (args[0] if args else None)
         home_dev = feats[0].device if feats else tx_dev
         # generate() 除 transformer 外全用 kwargs;万一有 positional 也一并搬
@@ -181,40 +186,67 @@ def install_tx_bridge():
 
 
 def sweep_devices(pipe):
-    """把每个子模块的所有 param/buffer 强行搬到该模块自己的 device。
+    """把每个"放置单元"的所有 param/buffer 强行搬到该单元自己的 device。
 
     WHY:PEFT 的 load_lora_weights/set_adapters 在多卡 dispatch 下可能把新建的
     LoRA 权重放在 cuda:0(它以 text_encoder 所在卡当"模型 device"),导致
     transformer 内部 forward 撞设备(远程机器失败 #11)。必须在 set_adapters
-    【之后】调用。"""
+    【之后】调用。
+
+    WHY 按"单元"而不是按整个组件对齐:3gpu dispatch 把 transformer 的
+    dual/single blocks 放在不同卡上,若以 transformer 首个 param 的 device
+    为准会把 single blocks 拉回 dual 卡,当场 OOM。因此 ModuleList 按【逐块】
+    为单元,其余 top-level child 各自为单元;单元内首个 param(基座权重,
+    放置时已就位)的 device 即该单元的正确归属,误放的 LoRA 权重被拉回来。"""
+    import torch
+
+    def units(module):
+        for child in module.children():
+            if isinstance(child, torch.nn.ModuleList):
+                yield from child          # 逐块:允许 blocks 分布在多张卡
+            else:
+                yield child
+
     moved = 0
-    for module in (pipe.transformer, pipe.text_encoder, pipe.text_encoder_2, pipe.vae):
-        target = next(module.parameters()).device
-        for p in module.parameters():
-            if p.device != target:
-                p.data = p.data.to(target)
-                moved += 1
-        for b in module.buffers():
-            if b.device != target:
-                b.data = b.data.to(target)
-                moved += 1
+    for component in (pipe.transformer, pipe.text_encoder, pipe.text_encoder_2, pipe.vae):
+        for unit in units(component):
+            params = list(unit.parameters())
+            if not params:
+                continue
+            target = params[0].device
+            for p in params:
+                if p.device != target:
+                    p.data = p.data.to(target)
+                    moved += 1
+            for b in unit.buffers():
+                if b.device != target:
+                    b.data = b.data.to(target)
+                    moved += 1
     log.info("device 安全网:搬了 %d 个 param/buffer", moved)
     return moved
 
 
 def load_pipeline(flux_path="black-forest-labs/FLUX.1-dev", dispatch="auto",
-                  gpu0: int = 0, gpu1: int = 1):
+                  gpu0: int = 0, gpu1: int = 1, gpu2: int = None):
     """加载 FLUX pipeline,按显存自动选择放置策略。
 
     single: 整个 pipeline .to("cuda")(需要单卡 >= 40 GB)。
     2gpu:   encoders+vae -> cuda:{gpu0},transformer 整块 -> cuda:{gpu1},并安装 tx bridge。
-            关键:transformer 必须整块放一张卡;accelerate 的 device_map="balanced"
+            关键:transformer 不能在 block【内部】跨卡;accelerate 的 device_map="balanced"
             会按权重把它切到多张卡,内部 matmul 直接跨卡报错(失败 #6)。
+    3gpu:   encoders+vae -> cuda:{gpu0};transformer 在【block 边界】手工二分:
+            embedders + 19 dual blocks -> cuda:{gpu1},38 single blocks +
+            norm_out/proj_out -> cuda:{gpu2}。transformer_forward 会在边界搬运
+            hidden states(每 step 两次 ~19MB PCIe,可忽略)。
+            WHY:24G 卡放 transformer 整块(~22.6GB)后余量 <1GB,挂 LoRA +
+            image_guidance_scale 的双 KV 缓存(~1.5GB)必然 OOM;二分后每张卡
+            余量 ~10GB。与失败 #6 不冲突——那是块内切分,这是块间。
 
     Args:
-        gpu0: 2gpu dispatch 主场 GPU(devices for text_encoder/text_encoder_2/vae/latents)。
-              默认 0。当 cuda:0 被 defunct context 死锁时可改成其它空卡。
-        gpu1: 2gpu dispatch 变压器卡(device for transformer 整块)。默认 1。
+        gpu0: 主场 GPU(text_encoder/text_encoder_2/vae/latents)。默认 0。
+              当 cuda:0 被 defunct context 死锁时可改成其它空卡。
+        gpu1: transformer 卡(2gpu: 整块;3gpu: dual blocks + embedders)。默认 1。
+        gpu2: 3gpu 专用,single blocks + norm_out/proj_out 所在卡。
     """
     import torch
     from diffusers import FluxPipeline
@@ -237,23 +269,36 @@ def load_pipeline(flux_path="black-forest-labs/FLUX.1-dev", dispatch="auto",
         pipe = FluxPipeline.from_pretrained(flux_path, torch_dtype=torch.bfloat16).to("cuda")
         return pipe
 
-    if dispatch != "2gpu":
+    if dispatch not in ("2gpu", "3gpu"):
         raise ValueError(f"未知 dispatch: {dispatch}")
-    if n_gpu < 2:
+    need = 3 if dispatch == "3gpu" else 2
+    if n_gpu < need:
         raise RuntimeError(
-            f"2gpu 策略需要至少 2 张 GPU(当前 {n_gpu} 张)。"
+            f"{dispatch} 策略需要至少 {need} 张 GPU(当前 {n_gpu} 张)。"
             "单张小卡请看 repro/TROUBLESHOOTING.md 的量化退路方案。")
-    if gpu0 == gpu1:
-        raise ValueError(f"gpu0 == gpu1 == {gpu0},2gpu dispatch 必须用两张不同的卡")
+    if dispatch == "3gpu" and gpu2 is None:
+        raise ValueError("3gpu dispatch 必须显式指定 gpu2")
+    used = [gpu0, gpu1] + ([gpu2] if dispatch == "3gpu" else [])
+    if len(set(used)) != len(used):
+        raise ValueError(f"dispatch 各卡必须互不相同,当前 {used}")
 
-    log.info("加载 FLUX pipeline: %s (bf16, 2gpu 手工 dispatch)", flux_path)
+    log.info("加载 FLUX pipeline: %s (bf16, %s 手工 dispatch)", flux_path, dispatch)
     pipe = FluxPipeline.from_pretrained(flux_path, torch_dtype=torch.bfloat16)
     pipe.text_encoder.to(f"cuda:{gpu0}")
     pipe.text_encoder_2.to(f"cuda:{gpu0}")
     pipe.vae.to(f"cuda:{gpu0}")
-    pipe.transformer.to(f"cuda:{gpu1}")
-    log.info("dispatch 完成: cuda:%d = encoders+vae+latents(主场), cuda:%d = transformer",
-             gpu0, gpu1)
+    if dispatch == "2gpu":
+        pipe.transformer.to(f"cuda:{gpu1}")
+        log.info("dispatch 完成: cuda:%d = encoders+vae+latents(主场), cuda:%d = transformer",
+                 gpu0, gpu1)
+    else:
+        # 按 top-level child 逐个放置(不能先整体 .to(gpu1) —— 24G 卡装不下整块)
+        _TAIL = ("single_transformer_blocks", "norm_out", "proj_out")
+        for name, child in pipe.transformer.named_children():
+            child.to(f"cuda:{gpu2}" if name in _TAIL else f"cuda:{gpu1}")
+        log.info("dispatch 完成: cuda:%d = encoders+vae+latents(主场), "
+                 "cuda:%d = embedders+dual blocks, cuda:%d = single blocks+out",
+                 gpu0, gpu1, gpu2)
 
     # generate() 用 pipe._execution_device 创建 latents/timesteps 等,必须是主场。
     # diffusers 取 components 里第一个 nn.Module 的 device,正常应命中主场的模块;
@@ -334,7 +379,7 @@ def run():
         raise
 
     pipe = load_pipeline(args.flux_path, dispatch=args.dispatch,
-                         gpu0=args.gpu0, gpu1=args.gpu1)
+                         gpu0=args.gpu0, gpu1=args.gpu1, gpu2=args.gpu2)
     attach_lora(pipe, args.lora_repo, args.lora_weight, args.adapter_name)
 
     if not args.no_independent_check:
