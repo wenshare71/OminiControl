@@ -1,0 +1,110 @@
+[
+  {
+    "case": "penguin",
+    "seed": 42,
+    "prompt": "On Christmas evening, on a crowded sidewalk, this item sits on the road, covered in snow and wearing a Christmas hat.",
+    "default": "repro/subject_lora_compare_512/penguin_s42_default.png",
+    "default_sec": 19.7,
+    "kvcache": "repro/subject_lora_compare_512/penguin_s42_kvcache.png",
+    "kvcache_sec": 12.0
+  },
+  {
+    "case": "penguin",
+    "seed": 1234,
+    "prompt": "On Christmas evening, on a crowded sidewalk, this item sits on the road, covered in snow and wearing a Christmas hat.",
+    "default": "repro/subject_lora_compare_512/penguin_s1234_default.png",
+    "default_sec": 19.1,
+    "kvcache": "repro/subject_lora_compare_512/penguin_s1234_kvcache.png",
+    "kvcache_sec": 11.9
+  },
+  {
+    "case": "rc_car",
+    "seed": 42,
+    "prompt": "A film style shot. On the moon, this item drives across the moon surface. The background is that Earth looms large in the foreground.",
+    "default": "repro/subject_lora_compare_512/rc_car_s42_default.png",
+    "default_sec": 19.2,
+    "kvcache": "repro/subject_lora_compare_512/rc_car_s42_kvcache.png",
+    "kvcache_sec": 12.1
+  },
+  {
+    "case": "rc_car",
+    "seed": 1234,
+    "prompt": "A film style shot. On the moon, this item drives across the moon surface. The background is that Earth looms large in the foreground.",
+    "default": "repro/subject_lora_compare_512/rc_car_s1234_default.png",
+    "default_sec": 19.2,
+    "kvcache": "repro/subject_lora_compare_512/rc_car_s1234_kvcache.png",
+    "kvcache_sec": 12.0
+  },
+  {
+    "case": "tshirt",
+    "seed": 42,
+    "prompt": "On the beach, a lady sits under a beach umbrella. She's wearing this shirt and has a big smile on her face, with her surfboard hehind her. The sun is setting in the background. The sky is a beautiful shade of orange and purple.",
+    "default": "repro/subject_lora_compare_512/tshirt_s42_default.png",
+    "default_sec": 19.2,
+    "kvcache": "repro/subject_lora_compare_512/tshirt_s42_kvcache.png",
+    "kvcache_sec": 12.0
+  },
+  {
+    "case": "tshirt",
+    "seed": 1234,
+    "prompt": "On the beach, a lady sits under a beach umbrella. She's wearing this shirt and has a big smile on her face, with her surfboard hehind her. The sun is setting in the background. The sky is a beautiful shade of orange and purple.",
+    "default": "repro/subject_lora_compare_512/tshirt_s1234_default.png",
+    "default_sec": 19.2,
+    "kvcache": "repro/subject_lora_compare_512/tshirt_s1234_kvcache.png",
+    "kvcache_sec": 12.0
+  },
+  {
+    "case": "clock",
+    "seed": 42,
+    "prompt": "In a Bauhaus style room, this item is placed on a shiny glass table, with a vase of flowers next to it. In the afternoon sun, the shadows of the blinds are cast on the wall.",
+    "default": "repro/subject_lora_compare_512/clock_s42_default.png",
+    "default_sec": 19.2,
+    "kvcache": "repro/subject_lora_compare_512/clock_s42_kvcache.png",
+    "kvcache_sec": 12.0
+  },
+  {
+    "case": "clock",
+    "seed": 1234,
+    "prompt": "In a Bauhaus style room, this item is placed on a shiny glass table, with a vase of flowers next to it. In the afternoon sun, the shadows of the blinds are cast on the wall.",
+    "default": "repro/subject_lora_compare_512/clock_s1234_default.png",
+    "default_sec": 19.2,
+    "kvcache": "repro/subject_lora_compare_512/clock_s1234_kvcache.png",
+    "kvcache_sec": 12.0
+  },
+  {
+    "case": "oranges",
+    "seed": 42,
+    "prompt": "A very close up view of this item. It is placed on a wooden table. The background is a dark room, the TV is on, and the screen is showing a cooking show.",
+    "default": "repro/subject_lora_compare_512/oranges_s42_default.png",
+    "default_sec": 19.2,
+    "kvcache": "repro/subject_lora_compare_512/oranges_s42_kvcache.png",
+    "kvcache_sec": 12.0
+  },
+  {
+    "case": "oranges",
+    "seed": 1234,
+    "prompt": "A very close up view of this item. It is placed on a wooden table. The background is a dark room, the TV is on, and the screen is showing a cooking show.",
+    "default": "repro/subject_lora_compare_512/oranges_s1234_default.png",
+    "default_sec": 19.2,
+    "kvcache": "repro/subject_lora_compare_512/oranges_s1234_kvcache.png",
+    "kvcache_sec": 12.0
+  },
+  {
+    "case": "book",
+    "seed": 42,
+    "prompt": "This item is placed on a wooden desk in a library, next to a cup of coffee, under the warm light of a reading lamp.",
+    "default": "repro/subject_lora_compare_512/book_s42_default.png",
+    "default_sec": 19.2,
+    "kvcache": "repro/subject_lora_compare_512/book_s42_kvcache.png",
+    "kvcache_sec": 12.0
+  },
+  {
+    "case": "book",
+    "seed": 1234,
+    "prompt": "This item is placed on a wooden desk in a library, next to a cup of coffee, under the warm light of a reading lamp.",
+    "default": "repro/subject_lora_compare_512/book_s1234_default.png",
+    "default_sec": 19.2,
+    "kvcache": "repro/subject_lora_compare_512/book_s1234_kvcache.png",
+    "kvcache_sec": 12.0
+  }
+]
