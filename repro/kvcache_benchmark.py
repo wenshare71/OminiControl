@@ -100,6 +100,12 @@ def parse_args():
     p.add_argument("--size", type=int, default=512)
     p.add_argument("--dispatch", default="auto", choices=["auto", "single", "2gpu"],
                    help="auto: GPU0 显存 >=40GB 用 single,否则 2gpu")
+    p.add_argument("--gpu0", type=int, default=0,
+                   help="2gpu dispatch 主场 GPU(encoders+vae+latents)。"
+                        "若 cuda:0 被 defunct context 死锁可改用其它空卡")
+    p.add_argument("--gpu1", type=int, default=1,
+                   help="2gpu dispatch 变压器卡 GPU(transformer 整块)。"
+                        "若 cuda:1 被 defunct context 死锁可改用其它空卡")
     p.add_argument("--no-independent-check", action="store_true",
                    help="跳过 independent_condition 权重检查(冒烟测试用)")
     p.add_argument("--out", default="repro/kvcache_results", help="输出目录")
@@ -196,13 +202,19 @@ def sweep_devices(pipe):
     return moved
 
 
-def load_pipeline(flux_path="black-forest-labs/FLUX.1-dev", dispatch="auto"):
+def load_pipeline(flux_path="black-forest-labs/FLUX.1-dev", dispatch="auto",
+                  gpu0: int = 0, gpu1: int = 1):
     """加载 FLUX pipeline,按显存自动选择放置策略。
 
     single: 整个 pipeline .to("cuda")(需要单卡 >= 40 GB)。
-    2gpu:   encoders+vae -> cuda:0,transformer 整块 -> cuda:1,并安装 tx bridge。
+    2gpu:   encoders+vae -> cuda:{gpu0},transformer 整块 -> cuda:{gpu1},并安装 tx bridge。
             关键:transformer 必须整块放一张卡;accelerate 的 device_map="balanced"
             会按权重把它切到多张卡,内部 matmul 直接跨卡报错(失败 #6)。
+
+    Args:
+        gpu0: 2gpu dispatch 主场 GPU(devices for text_encoder/text_encoder_2/vae/latents)。
+              默认 0。当 cuda:0 被 defunct context 死锁时可改成其它空卡。
+        gpu1: 2gpu dispatch 变压器卡(device for transformer 整块)。默认 1。
     """
     import torch
     from diffusers import FluxPipeline
@@ -231,22 +243,25 @@ def load_pipeline(flux_path="black-forest-labs/FLUX.1-dev", dispatch="auto"):
         raise RuntimeError(
             f"2gpu 策略需要至少 2 张 GPU(当前 {n_gpu} 张)。"
             "单张小卡请看 repro/TROUBLESHOOTING.md 的量化退路方案。")
+    if gpu0 == gpu1:
+        raise ValueError(f"gpu0 == gpu1 == {gpu0},2gpu dispatch 必须用两张不同的卡")
 
     log.info("加载 FLUX pipeline: %s (bf16, 2gpu 手工 dispatch)", flux_path)
     pipe = FluxPipeline.from_pretrained(flux_path, torch_dtype=torch.bfloat16)
-    pipe.text_encoder.to("cuda:0")
-    pipe.text_encoder_2.to("cuda:0")
-    pipe.vae.to("cuda:0")
-    pipe.transformer.to("cuda:1")
-    log.info("dispatch 完成: cuda:0 = encoders+vae+latents(主场), cuda:1 = transformer")
+    pipe.text_encoder.to(f"cuda:{gpu0}")
+    pipe.text_encoder_2.to(f"cuda:{gpu0}")
+    pipe.vae.to(f"cuda:{gpu0}")
+    pipe.transformer.to(f"cuda:{gpu1}")
+    log.info("dispatch 完成: cuda:%d = encoders+vae+latents(主场), cuda:%d = transformer",
+             gpu0, gpu1)
 
-    # generate() 用 pipe._execution_device 创建 latents/timesteps 等,必须是主场 cuda:0。
-    # diffusers 取 components 里第一个 nn.Module 的 device,正常应命中 cuda:0 的模块;
+    # generate() 用 pipe._execution_device 创建 latents/timesteps 等,必须是主场。
+    # diffusers 取 components 里第一个 nn.Module 的 device,正常应命中主场的模块;
     # 若未来 diffusers 改了顺序命中 transformer,这里立刻报错而不是深处炸 addmm。
     exec_dev = str(pipe._execution_device)
-    if exec_dev != "cuda:0":
+    if exec_dev != f"cuda:{gpu0}":
         raise RuntimeError(
-            f"pipe._execution_device 是 {exec_dev},预期 cuda:0。"
+            f"pipe._execution_device 是 {exec_dev},预期 cuda:{gpu0}。"
             "diffusers 版本行为变化,见 repro/TROUBLESHOOTING.md §设备排查。")
 
     install_tx_bridge()
@@ -318,7 +333,8 @@ def run():
         log.error("导入失败,确认在仓库根目录且已 pip install -r requirements.txt:%s", e)
         raise
 
-    pipe = load_pipeline(args.flux_path, dispatch=args.dispatch)
+    pipe = load_pipeline(args.flux_path, dispatch=args.dispatch,
+                         gpu0=args.gpu0, gpu1=args.gpu1)
     attach_lora(pipe, args.lora_repo, args.lora_weight, args.adapter_name)
 
     if not args.no_independent_check:

@@ -3,3 +3,4 @@
 /runs
 *.bak.*
 .ipynb_checkpoints
+repro/base_mode_compare_*/*
