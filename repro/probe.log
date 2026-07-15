@@ -1,0 +1,42 @@
+10:42:05 [INFO][probe] cudnn disabled (workaround for VAE CUDNN_STATUS_NOT_INITIALIZED)
+10:42:07 [WARNING][probe] Skipping import of cpp extensions due to incompatible torch version. Please upgrade to torch >= 2.11.0 (found 2.8.0+cu128).
+Unable to import `torchao` Tensor objects. This may affect loading checkpoints serialized with `torchao`
+10:42:08 [INFO][probe] ckpt=runs/20260713-111742/ckpt/5000 cond=256px(pos_scale=2.0) target=512px steps=3 最多试 12 张
+10:42:08 [INFO][probe] GPU 0: NVIDIA GeForce RTX 4090 | 23.6 GB
+10:42:08 [INFO][probe] GPU 1: NVIDIA GeForce RTX 4090 | 23.6 GB
+10:42:08 [INFO][probe] GPU 2: NVIDIA GeForce RTX 4090 | 23.6 GB
+10:42:08 [INFO][probe] GPU 3: NVIDIA GeForce RTX 4090 | 23.6 GB
+10:42:08 [INFO][probe] GPU 4: NVIDIA GeForce RTX 4090 | 23.6 GB
+10:42:08 [INFO][probe] GPU 5: NVIDIA GeForce RTX 4090 | 23.6 GB
+10:42:08 [INFO][probe] GPU 6: NVIDIA GeForce RTX 4090 | 23.6 GB
+10:42:08 [INFO][probe] GPU 7: NVIDIA GeForce RTX 4090 | 23.6 GB
+10:42:08 [INFO][probe] dispatch=auto -> 选择 2gpu(GPU0 24 GB)
+10:42:08 [INFO][probe] 加载 FLUX pipeline: black-forest-labs/FLUX.1-dev (bf16, 2gpu 手工 dispatch)
+Loading pipeline components...:   0%|          | 0/7 [00:00<?, ?it/s]
+Loading checkpoint shards:   0%|          | 0/3 [00:00<?, ?it/s][ALoading checkpoint shards: 100%|██████████| 3/3 [00:00<00:00, 50.83it/s]
+Loading pipeline components...:  14%|█▍        | 1/7 [00:00<00:01,  5.16it/s]You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers
+Loading pipeline components...:  29%|██▊       | 2/7 [00:00<00:00,  5.50it/s]
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s][ALoading checkpoint shards: 100%|██████████| 2/2 [00:00<00:00, 95.24it/s]
+Loading pipeline components...:  57%|█████▋    | 4/7 [00:00<00:00,  6.68it/s]Loading pipeline components...: 100%|██████████| 7/7 [00:00<00:00,  9.78it/s]
+10:42:19 [INFO][probe] dispatch 完成: cuda:0 = encoders+vae+latents(主场), cuda:1 = transformer
+10:42:19 [INFO][probe] 已安装 tx bridge:输入 -> transformer 卡,输出 -> 主场卡
+10:42:19 [INFO][probe] 加载 LoRA: runs/20260713-111742/ckpt/5000 :: default.safetensors
+No LoRA keys associated to CLIPTextModel found with the prefix='text_encoder'. This is safe to ignore if LoRA state dict didn't originally have any CLIPTextModel related params. You can also try specifying `prefix=None` to resolve the warning. Otherwise, open an issue if you think it's unexpected: https://github.com/huggingface/diffusers/issues/new
+10:42:20 [INFO][probe] device 安全网:搬了 0 个 param/buffer
+  0%|          | 0/3 [00:00<?, ?it/s] 33%|███▎      | 1/3 [00:00<00:00,  2.76it/s] 67%|██████▋   | 2/3 [00:00<00:00,  3.77it/s]100%|██████████| 3/3 [00:00<00:00,  4.27it/s]100%|██████████| 3/3 [00:00<00:00,  3.96it/s]
+10:42:22 [INFO][probe] n_cond=1  OK ✓  1.4s  峰值 cuda:0=10.7G cuda:1=22.5G cuda:2=0.0G cuda:3=0.0G cuda:4=0.0G cuda:5=0.0G cuda:6=0.0G cuda:7=0.0G
+  0%|          | 0/3 [00:00<?, ?it/s] 33%|███▎      | 1/3 [00:00<00:00,  3.05it/s] 67%|██████▋   | 2/3 [00:00<00:00,  3.96it/s]100%|██████████| 3/3 [00:00<00:00,  4.38it/s]100%|██████████| 3/3 [00:00<00:00,  4.12it/s]
+10:42:23 [INFO][probe] n_cond=2  OK ✓  0.9s  峰值 cuda:0=10.7G cuda:1=22.7G cuda:2=0.0G cuda:3=0.0G cuda:4=0.0G cuda:5=0.0G cuda:6=0.0G cuda:7=0.0G
+  0%|          | 0/3 [00:00<?, ?it/s] 33%|███▎      | 1/3 [00:00<00:00,  2.37it/s] 67%|██████▋   | 2/3 [00:00<00:00,  3.41it/s]100%|██████████| 3/3 [00:00<00:00,  3.96it/s]100%|██████████| 3/3 [00:00<00:00,  3.62it/s]
+10:42:24 [INFO][probe] n_cond=3  OK ✓  1.0s  峰值 cuda:0=10.7G cuda:1=22.9G cuda:2=0.0G cuda:3=0.0G cuda:4=0.0G cuda:5=0.0G cuda:6=0.0G cuda:7=0.0G
+  0%|          | 0/3 [00:00<?, ?it/s] 33%|███▎      | 1/3 [00:00<00:01,  1.92it/s] 67%|██████▋   | 2/3 [00:00<00:00,  2.99it/s]100%|██████████| 3/3 [00:00<00:00,  3.61it/s]100%|██████████| 3/3 [00:00<00:00,  3.22it/s]
+10:42:25 [INFO][probe] n_cond=4  OK ✓  1.1s  峰值 cuda:0=10.7G cuda:1=23.1G cuda:2=0.0G cuda:3=0.0G cuda:4=0.0G cuda:5=0.0G cuda:6=0.0G cuda:7=0.0G
+  0%|          | 0/3 [00:00<?, ?it/s]  0%|          | 0/3 [00:00<?, ?it/s]
+10:42:26 [WARNING][probe] n_cond=5  OOM ✗ —— 上限确定
+
+===== 结论 =====
+条件图 256px + kv_cache=True:最多 4 张不 OOM(试到 5 张为止)
+  n_cond=1: 峰值 cuda:0=10.7G cuda:1=22.5G cuda:2=0.0G cuda:3=0.0G cuda:4=0.0G cuda:5=0.0G cuda:6=0.0G cuda:7=0.0G
+  n_cond=2: 峰值 cuda:0=10.7G cuda:1=22.7G cuda:2=0.0G cuda:3=0.0G cuda:4=0.0G cuda:5=0.0G cuda:6=0.0G cuda:7=0.0G
+  n_cond=3: 峰值 cuda:0=10.7G cuda:1=22.9G cuda:2=0.0G cuda:3=0.0G cuda:4=0.0G cuda:5=0.0G cuda:6=0.0G cuda:7=0.0G
+  n_cond=4: 峰值 cuda:0=10.7G cuda:1=23.1G cuda:2=0.0G cuda:3=0.0G cuda:4=0.0G cuda:5=0.0G cuda:6=0.0G cuda:7=0.0G
