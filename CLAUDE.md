@@ -10,6 +10,19 @@ Validated stack (see `requirements.txt`): Python 3.12, torch 2.8 (cu12x), `diffu
 
 There is no test suite, linter, or formatter wired up — verification is end-to-end via the example notebooks and training scripts.
 
+## 文档索引(先看这里,再动手)
+
+| 文档 | 内容 | 状态 |
+|---|---|---|
+| [`MACHINE_STATUS.md`](MACHINE_STATUS.md) | 远程机器(8×4090)当前环境状态 v2:硬件、2gpu dispatch、显存预算、存储布局、软件栈、v1 误诊存档 | ✅ 最新(2026-07-15) |
+| [`repro/ENV_REBUILD.md`](repro/ENV_REBUILD.md) | 从零重建环境的全链路 8 步 + 8 个踩坑(症状/误判/真因/修复):Ceph 70 分钟坑、cu121 索引坑、`/proc/PID/io` 监控法等 | ✅ 最新(2026-07-15) |
+| [`train/setup_env.sh`](train/setup_env.sh) | 远程机器一键环境激活脚本(venv 丢失自动重建,uv 版)。用法:`source train/setup_env.sh` | ✅ 最新(uv 版) |
+| [`repro/REPRODUCE_FEATURE_REUSE.md`](repro/REPRODUCE_FEATURE_REUSE.md) | Feature Reuse (KV-Cache) 复现方案与实验设计 | ⚠️ §3 环境搭建已过期(见文内 banner),其余有效 |
+| [`repro/REPRODUCE_FEATURE_REUSE_STATUS.md`](repro/REPRODUCE_FEATURE_REUSE_STATUS.md) | 复现进度记录(stage1-3 结果、失败分析) | ⚠️ §1 机器环境已过期(见文内 banner),§2 之后有效 |
+| [`repro/TROUBLESHOOTING.md`](repro/TROUBLESHOOTING.md) | 复现过程中的历史故障排查(含失败 #6:transformer 跨卡切分报错) | 参考 |
+
+> 🔴 **机器环境相关问题一律以 `MACHINE_STATUS.md` v2 为准**;任何文档里教 conda / 说驱动需要升级的内容都已过期。
+
 ## Repository layout
 
 ```
@@ -77,7 +90,11 @@ Switch by setting `condition_type` in the config:
 
 ## Common development tasks
 
-Setup (per `requirements.txt` and `train/README.md`):
+Setup — 在远程机器(aiplatform-bjy-ge47-391)上直接:
+```bash
+source train/setup_env.sh   # 自动重建 venv(uv 版),设置 HF_HOME,自检 CUDA
+```
+其它机器通用流程(per `requirements.txt` and `train/README.md`):
 ```bash
 conda create -n omini python=3.12 && conda activate omini
 pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
@@ -110,3 +127,46 @@ When loading more than one adapter via repeated `pipe.load_lora_weights(..., ada
 
 `schnell` (the default in `subject.ipynb`): `image_guidance_scale=1.0`, ~8 steps.
 `dev` (see `subject_dev.ipynb`): `image_guidance_scale≈1.5` (the *only* tunable CFG), `guidance_scale=3.5` **must stay fixed** (matches training), ~20–28 steps. Preprocess inputs with center-crop + resize to 512×512 (or 1024×1024 for `subject_1024_beta`); the pipeline does not do this automatically. The `subject_512` LoRA uses `position_delta=(0, 32)`; `subject_1024_beta` uses `(0, -32)` (sign is arbitrary — both separate condition from target).
+<!-- gitnexus:start -->
+# GitNexus — Code Intelligence
+
+This project is indexed by GitNexus as **OminiControl** (416 symbols, 655 relationships, 35 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+
+## Always Do
+
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+
+## Never Do
+
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+
+## Resources
+
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/OminiControl/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/OminiControl/clusters` | All functional areas |
+| `gitnexus://repo/OminiControl/processes` | All execution flows |
+| `gitnexus://repo/OminiControl/process/{name}` | Step-by-step execution trace |
+
+## CLI
+
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
+<!-- gitnexus:end -->
