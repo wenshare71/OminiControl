@@ -1,0 +1,297 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 205, in <module>
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 205, in <module>
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 205, in <module>
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 205, in <module>
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 205, in <module>
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 205, in <module>
+                    main()    main()
+main()main()main()
+main()
+
+
+
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 191, in main
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 191, in main
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 191, in main
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 191, in main
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 191, in main
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 191, in main
+    trainable_model = OminiModel(
+              trainable_model = OminiModel(trainable_model = OminiModel( 
+        trainable_model = OminiModel(
+ trainable_model = OminiModel(trainable_model = OminiModel(
+  
+
+                                                                                                    ^   ^^  ^     ^   ^ ^   ^  ^ ^^ ^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^  File "/home/wuwenxuan03/OminiControl/omini/train_flux/trainer.py", line 69, in __init__
+^^^^^^^^^^^^
+^^^^^^
+
+^  File "/home/wuwenxuan03/OminiControl/omini/train_flux/trainer.py", line 69, in __init__
+^
+
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/trainer.py", line 69, in __init__
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/trainer.py", line 69, in __init__
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/trainer.py", line 69, in __init__
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/trainer.py", line 69, in __init__
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 205, in <module>
+    main()
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 191, in main
+    trainable_model = OminiModel(
+                      ^^^^^^^^^^^
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/trainer.py", line 69, in __init__
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 205, in <module>
+    main()
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/train_subject.py", line 191, in main
+    trainable_model = OminiModel(
+                      ^^^^^^^^^^^
+  File "/home/wuwenxuan03/OminiControl/omini/train_flux/trainer.py", line 69, in __init__
+            ).to(device)).to(device)).to(device)    
+
+            
+    ).to(device)).to(device)).to(device)).to(device)).to(device)
+
+ 
+
+ 
+                        ^        ^  ^  ^ ^   ^^ ^ ^ ^ ^^^^^ ^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^
+^^^^^^
+^^^  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/pipelines/pipeline_utils.py", line 569, into
+^
+^  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/pipelines/pipeline_utils.py", line 569, in to
+^^
+^  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/pipelines/pipeline_utils.py", line 569, in to
+
+^^  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/pipelines/pipeline_utils.py", line 569, in to
+
+^  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/pipelines/pipeline_utils.py", line 569, in to
+
+  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/pipelines/pipeline_utils.py", line 569, in to
+  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/pipelines/pipeline_utils.py", line 569, in to
+  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/pipelines/pipeline_utils.py", line 569, in to
+        module.to(device, dtype)module.to(device, dtype)
+
+            module.to(device, dtype)module.to(device, dtype)module.to(device, dtype)
+
+    
+      File "/root/omini-venv/lib/python3.12/site-packages/diffusers/models/modeling_utils.py", line 1528, in to
+module.to(device, dtype)  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/models/modeling_utils.py", line 1528, in to
+module.to(device, dtype)
+
+  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/models/modeling_utils.py", line 1528, in to
+      File "/root/omini-venv/lib/python3.12/site-packages/diffusers/models/modeling_utils.py", line 1528, in to
+module.to(device, dtype)  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/models/modeling_utils.py", line 1528, in to
+
+  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/models/modeling_utils.py", line 1528, in to
+  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/models/modeling_utils.py", line 1528, in to
+  File "/root/omini-venv/lib/python3.12/site-packages/diffusers/models/modeling_utils.py", line 1528, in to
+        return super().to(*args, **kwargs)return super().to(*args, **kwargs)    
+
+return super().to(*args, **kwargs)        
+return super().to(*args, **kwargs)    return super().to(*args, **kwargs)    
+return super().to(*args, **kwargs)
+ return super().to(*args, **kwargs) 
+
+         return super().to(*args, **kwargs)      
+                                                       ^^      ^^   ^  ^^^ ^  ^ ^^^ ^ ^^ ^^^ ^^^^^^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^
+^^^^^^^  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1369, in to
+^
+
+^^
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1369, in to
+^^^
+^^  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1369, in to
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1369, in to
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1369, in to
+
+^
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1369, in to
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1369, in to
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1369, in to
+    return self._apply(convert)    
+return self._apply(convert)
+              return self._apply(convert)return self._apply(convert)    return self._apply(convert)  
+    
+return self._apply(convert)
+       return self._apply(convert)
+ return self._apply(convert) 
+    
+                                     ^^      ^^       ^^      ^^  ^ ^   ^   ^  ^^^   ^ ^^^  ^^^^ ^^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^
+^^  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+^^^^^^^^^^  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+^^^^^^^^
+^^^^^^^^^^
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+^^^^
+
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+
+^  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+      File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+module._apply(fn)  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928,in _apply
+
+    module._apply(fn)
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+    module._apply(fn)
+    module._apply(fn)
+      File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+        module._apply(fn)module._apply(fn)module._apply(fn)
+    
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+
+module._apply(fn)
+      File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+module._apply(fn)  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928,in _apply
+
+      File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+module._apply(fn)
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+    module._apply(fn)
+    module._apply(fn)  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+
+        module._apply(fn)      File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+module._apply(fn)
+module._apply(fn)    
+    
+module._apply(fn)module._apply(fn)
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+    module._apply(fn)  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 928, in _apply
+
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 955, in _apply
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 955, in _apply
+    module._apply(fn)
+    module._apply(fn)
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 955, in _apply
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 955, in _apply
+    module._apply(fn)        
+module._apply(fn)    module._apply(fn)
+    module._apply(fn)
+param_applied = fn(param)  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 955, in _apply
+
+    
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 955, in _apply
+param_applied = fn(param)  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 955, in _apply
+
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 955, in _apply
+        param_applied = fn(param)  
+         param_applied = fn(param)  
+                 param_applied = fn(param)         
+        param_applied = fn(param)    param_applied = fn(param)    
+param_applied = fn(param)
+     
+                                   ^ ^     ^  ^    ^  ^     ^  ^    ^  ^   ^ ^ ^     ^ ^     ^ ^   
+^ ^    ^  
+   ^ ^  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1355, in convert
+   ^  ^  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1355, in convert
+  ^  ^  ^  ^  ^  ^ ^^  ^  ^^^^^ ^
+^^^^^^^^^^^  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1355, in convert
+
+^^^^^^^^^  File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1355, in convert
+^^    ^^^^return t.to(^^^^    
+^
+^^return t.to(
+
+
+
+   File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1355, in convert
+   File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1355, in convert
+   File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1355, in convert
+   File "/root/omini-venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1355, in convert
+                 return t.to(  
+ ^     ^return t.to(  
+^^ ^^  ^^  
+^  ^  
+  torch      .      OutOfMemoryErrortorchreturn t.to(: .return t.to(  
+ CUDA out of memory. Tried to allocate 90.00 MiB. GPU 5 has a total capacity of 23.65 GiB of which 74.06 MiB is free. Process 146527 has 23.57 GiB memory in use. Of the allocated memory 23.19 GiB is allocated by PyTorch, and 5.97 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try settingPYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)    OutOfMemoryError
+     ^
+ return t.to(: return t.to( ^ 
+CUDA out of memory. Tried to allocate 90.00 MiB. GPU 1 has a total capacity of 23.65 GiB of which 74.06 MiB is free. Process 146523 has 23.57 GiB memory in use. Of the allocated memory 23.19 GiB is allocated by PyTorch,and 5.97 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables) 
+ ^  
+^^    ^^   ^  
+   ^    ^    
+torch    .    OutOfMemoryErrortorch    : .^  CUDA out of memory. Tried to allocate 90.00 MiB. GPU 7 has a total capacity of 23.65 GiB of which 74.06 MiB is free. Process 146529 has 23.57 GiB memory in use. Of the allocated memory 23.19 GiB is allocated by PyTorch, and 5.97 MiB is reserved by PyTorch but unallocated. If reservedbut unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)OutOfMemoryError^  
+: ^  CUDA out of memory. Tried to allocate 90.00 MiB. GPU 2 has a total capacity of 23.65 GiB of which 74.06 MiB is free. Process 146524 has 23.57 GiB memory in use. Of the allocated memory 23.19 GiB is allocated by PyTorch, and 5.97 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)^^^
+^^^
+^^^^^^torch
+
+.OutOfMemoryError: torchtorchCUDA out of memory. Tried to allocate 90.00 MiB. GPU 0 has a total capacity of 23.65 GiB of which 74.06 MiB is free. Process 146522 has 23.57 GiB memory in use. Of the allocated memory 23.19GiB is allocated by PyTorch, and 5.97 MiB is reserved by PyTorch but unallocated. If reserved but unallocatedmemory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)..
+OutOfMemoryErrorOutOfMemoryError: : CUDA out of memory. Tried to allocate 90.00 MiB. GPU 4 has a total capacity of 23.65 GiB of which 74.06 MiB is free. Process 146526 has 23.57 GiB memory in use. Of the allocated memory 23.19 GiB is allocated by PyTorch, and 5.97 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)CUDA out of memory. Tried to allocate 90.00 MiB. GPU 3 has a total capacity of 23.65 GiB of which 74.06 MiB is free. Process 146525 has 23.57 GiB memory in use. Of the allocated memory 23.19 GiB is allocated by PyTorch, and 5.97 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try settingPYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+ ^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 90.00 MiB. GPU 6 has a total capacity of 23.65 GiB of which 74.06 MiB is free. Process 146528 has 23.57 GiB memory in use. Of the allocated memory 23.19 GiB is allocated by PyTorch, and 5.97 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+W0716 10:19:05.533000 86860 torch/distributed/elastic/multiprocessing/api.py:900] Sending process 86949 closing signal SIGTERM
+W0716 10:19:05.534000 86860 torch/distributed/elastic/multiprocessing/api.py:900] Sending process 86951 closing signal SIGTERM
+W0716 10:19:05.535000 86860 torch/distributed/elastic/multiprocessing/api.py:900] Sending process 86952 closing signal SIGTERM
+W0716 10:19:05.536000 86860 torch/distributed/elastic/multiprocessing/api.py:900] Sending process 86953 closing signal SIGTERM
+W0716 10:19:05.536000 86860 torch/distributed/elastic/multiprocessing/api.py:900] Sending process 86954 closing signal SIGTERM
+W0716 10:19:05.537000 86860 torch/distributed/elastic/multiprocessing/api.py:900] Sending process 86955 closing signal SIGTERM
+W0716 10:19:05.538000 86860 torch/distributed/elastic/multiprocessing/api.py:900] Sending process 86956 closing signal SIGTERM
+E0716 10:19:06.181000 86860 torch/distributed/elastic/multiprocessing/api.py:874] failed (exitcode: 1) local_rank: 1 (pid: 86950) of binary: /root/omini-venv/bin/python3
+Traceback (most recent call last):
+  File "/root/omini-venv/bin/accelerate", line 10, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/omini-venv/lib/python3.12/site-packages/accelerate/commands/accelerate_cli.py", line 50, in main
+    args.func(args)
+  File "/root/omini-venv/lib/python3.12/site-packages/accelerate/commands/launch.py", line 1398, in launch_command
+    multi_gpu_launcher(args)
+  File "/root/omini-venv/lib/python3.12/site-packages/accelerate/commands/launch.py", line 1023, in multi_gpu_launcher
+    distrib_run.run(args)
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/distributed/run.py", line 892, in run
+    elastic_launch(
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 143, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/omini-venv/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 277, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+omini.train_flux.train_subject FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-07-16_10:19:05
+  host      : aiplatform-bjy-ge47-391.idchb1az2.hb1.kwaidc.com
+  rank      : 1 (local_rank: 1)
+  exitcode  : 1 (pid: 86950)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================
