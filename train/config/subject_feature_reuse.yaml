@@ -1,7 +1,7 @@
 flux_path: "black-forest-labs/FLUX.1-dev"
 dtype: "bfloat16"
 
-# 与 subject.yaml 唯一差异:independent_condition 翻转为 true。
+# 与 subject.yaml 的差异 1:independent_condition 翻转为 true。
 # WHY:feature reuse(kv_cache=True)要求条件分支在训练时就与文本/噪声主图
 # 隔离(trainer.py 里 group_mask[2:, :2]=False),条件特征与 timestep 无关,
 # 缓存推理才与逐步重算等价。官方 subject_512 是 false 训的,开缓存会丢主体身份
@@ -10,6 +10,12 @@ model:
   independent_condition: true
 
 train:
+  # 与 subject.yaml 的差异 2:QLoRA。
+  # WHY:8×4090 每卡 23.65GiB,bf16 全量 pipeline(~31.5GiB/rank)加载即 OOM
+  # (见 train/script/feature_reuse.log)。NF4 量化冻结基座后 ~10GiB/rank,
+  # LoRA 本身仍全精度可训。删掉本行即回到官方 bf16 全量加载。
+  quantize: "nf4"
+
   accumulate_grad_batches: 1
   dataloader_workers: 5
   save_interval: 1000

@@ -57,6 +57,7 @@ class OminiModel(L.LightningModule):
         adapter_names: List[str] = [None, None, "default"],
         optimizer_config: dict = None,
         gradient_checkpointing: bool = False,
+        quantize: str = None,
     ):
         # Initialize the LightningModule
         super().__init__()
@@ -64,9 +65,14 @@ class OminiModel(L.LightningModule):
         self.optimizer_config = optimizer_config
 
         # Load the Flux pipeline
-        self.flux_pipe: FluxPipeline = FluxPipeline.from_pretrained(
-            flux_pipe_id, torch_dtype=dtype
-        ).to(device)
+        if quantize is None:
+            self.flux_pipe: FluxPipeline = FluxPipeline.from_pretrained(
+                flux_pipe_id, torch_dtype=dtype
+            ).to(device)
+        elif quantize == "nf4":
+            self.flux_pipe = self._load_pipeline_nf4(flux_pipe_id, dtype, device)
+        else:
+            raise ValueError(f"Unsupported quantize mode: {quantize!r} (use 'nf4')")
         self.transformer = self.flux_pipe.transformer
         self.transformer.gradient_checkpointing = gradient_checkpointing
         self.transformer.train()
@@ -82,6 +88,50 @@ class OminiModel(L.LightningModule):
         self.lora_layers = self.init_lora(lora_path, lora_config)
 
         self.to(device).to(dtype)
+
+    @staticmethod
+    def _load_pipeline_nf4(flux_pipe_id: str, dtype: torch.dtype, device: str):
+        # WHY: 24G 卡(4090)装不下 bf16 全量 pipeline —— transformer ~22.2GiB
+        # + T5-XXL ~8.9GiB,而单卡只有 23.65GiB,加载阶段必然 OOM。
+        # QLoRA 方案:冻结的 transformer 与 T5 以 NF4 量化加载(~6.6GiB + ~2.7GiB),
+        # LoRA 适配器保持全精度可训;bnb Linear4bit 前向时反量化到 compute_dtype,
+        # lora_forward 走 module.base_layer(x) 不受影响。
+        # 注意:调用前须已 torch.cuda.set_device(LOCAL_RANK)(各 train_* 入口均已做),
+        # bnb 量化发生在当前设备上,DDP 各 rank 才会落到各自的卡。
+        from diffusers import BitsAndBytesConfig as DiffusersBnBConfig
+        from diffusers import FluxTransformer2DModel
+        from transformers import BitsAndBytesConfig as TransformersBnBConfig
+        from transformers import T5EncoderModel
+
+        transformer = FluxTransformer2DModel.from_pretrained(
+            flux_pipe_id,
+            subfolder="transformer",
+            torch_dtype=dtype,
+            quantization_config=DiffusersBnBConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=dtype,
+            ),
+        )
+        text_encoder_2 = T5EncoderModel.from_pretrained(
+            flux_pipe_id,
+            subfolder="text_encoder_2",
+            torch_dtype=dtype,
+            quantization_config=TransformersBnBConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=dtype,
+            ),
+        )
+        pipe = FluxPipeline.from_pretrained(
+            flux_pipe_id,
+            transformer=transformer,
+            text_encoder_2=text_encoder_2,
+            torch_dtype=dtype,
+        )
+        # 量化组件移动设备是允许的(diffusers 只禁止对量化模型改 dtype);
+        # CLIP/VAE 等 bf16 小组件也一并搬上卡。
+        return pipe.to(device)
 
     def init_lora(self, lora_path: str, lora_config: dict):
         assert lora_path or lora_config

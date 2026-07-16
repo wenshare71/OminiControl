@@ -97,6 +97,18 @@ if [ ! -x "$OMINI_VENV/bin/python" ]; then
   echo "[omini] ✓ 重建完成"
 else
   . "$OMINI_VENV/bin/activate"
+
+  # 增量依赖自愈:bitsandbytes 是后加进 train/requirements.txt 的(QLoRA 训练用),
+  # 已存在的 venv 不会走上面的重建分支 → 缺了就单独补装。
+  # WHY 用 find_spec 而不是 import:bitsandbytes 导入时会初始化 CUDA,慢且带 warning。
+  if ! python -c "import importlib.util,sys; sys.exit(importlib.util.find_spec('bitsandbytes') is None)" 2>/dev/null; then
+    echo "[omini] 补装 bitsandbytes(QLoRA 训练依赖)..."
+    if command -v uv >/dev/null 2>&1; then
+      uv pip install "bitsandbytes>=0.45"
+    else
+      pip install "bitsandbytes>=0.45"
+    fi
+  fi
 fi
 
 # ── 自检 ────────────────────────────────────────────────────────────────

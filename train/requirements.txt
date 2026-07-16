@@ -19,3 +19,5 @@ datasets
 torchvision
 prodigyopt
 wandb
+# QLoRA(train.quantize: "nf4"):24G 卡训练必需,bf16 全量加载装不下
+bitsandbytes>=0.45

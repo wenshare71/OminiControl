@@ -196,6 +196,7 @@ def main():
         optimizer_config=training_config["optimizer"],
         model_config=config.get("model", {}),
         gradient_checkpointing=training_config.get("gradient_checkpointing", False),
+        quantize=training_config.get("quantize", None),
     )
 
     train(dataset, trainable_model, config, test_function)

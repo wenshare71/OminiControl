@@ -149,6 +149,7 @@ def main():
         optimizer_config=training_config["optimizer"],
         model_config=config.get("model", {}),
         gradient_checkpointing=training_config.get("gradient_checkpointing", False),
+        quantize=training_config.get("quantize", None),
         adapter_names=[None, None, *["default"] * cond_n],
         # In this setting, all the conditions are using the same LoRA adapter
     )
