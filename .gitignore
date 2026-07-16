@@ -4,3 +4,13 @@
 *.bak.*
 .ipynb_checkpoints
 repro/base_mode_compare_*/*
+
+!/runs/
+/runs/*
+!/runs/subject_feature_reuse/
+/runs/subject_feature_reuse/*
+!/runs/subject_feature_reuse/20260716-104006/
+/runs/subject_feature_reuse/20260716-104006/*
+!/runs/subject_feature_reuse/20260716-104006/output/
+/runs/subject_feature_reuse/20260716-104006/output/*
+!/runs/subject_feature_reuse/20260716-104006/output/*.jpg
